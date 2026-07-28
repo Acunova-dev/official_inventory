@@ -1,0 +1,6 @@
+{
+  "name": "Electronics Inventory & Billing System",
+  "description": "Multi-tenant inventory control, modular product catalog, custom customer pricing models, professional PDF quotation builder, and manual receipt history tracking dashboard built for electronics stores and warehouses.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
