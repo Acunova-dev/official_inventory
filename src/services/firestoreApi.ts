@@ -351,7 +351,7 @@ export const categoryService = {
     const path = `businesses/${businessId}/categories/${id}`;
     const item: CategoryItem = { id, name: data.name, description: data.description, createdAt: new Date().toISOString() };
     try {
-      await setDoc(doc(db, "businesses", businessId, "categories", id), item);
+      await setDoc(doc(db, "businesses", businessId, "categories", id), { ...item, businessId });
       return item;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
@@ -377,6 +377,7 @@ export const stockMovementService = {
     const record = {
       ...movement,
       id,
+      businessId,
       date: new Date().toISOString(),
       type: movement.movementType,
       quantityChange: movement.movementType === "Sale" ? -movement.quantity : movement.quantity,
@@ -608,7 +609,7 @@ export const quotationService = {
     };
 
     try {
-      await setDoc(doc(db, "businesses", businessId, "quotations", id), quote);
+      await setDoc(doc(db, "businesses", businessId, "quotations", id), { ...quote, businessId });
       return quote;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
@@ -742,7 +743,7 @@ export const receiptService = {
     };
 
     try {
-      await setDoc(doc(db, "businesses", businessId, "receipts", id), receipt);
+      await setDoc(doc(db, "businesses", businessId, "receipts", id), { ...receipt, businessId });
 
       await systemLogService.logAction(businessId, {
         category: "Receipt & Sales",
@@ -934,7 +935,7 @@ export const systemLogService = {
       timestamp: new Date().toISOString()
     };
     try {
-      await setDoc(doc(db, "businesses", businessId, "systemLogs", id), logItem);
+      await setDoc(doc(db, "businesses", businessId, "systemLogs", id), { ...logItem, businessId });
       return logItem;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
@@ -1095,7 +1096,7 @@ export const purchasingService = {
     };
 
     try {
-      await setDoc(doc(db, "businesses", businessId, "purchaseOrders", id), order);
+      await setDoc(doc(db, "businesses", businessId, "purchaseOrders", id), { ...order, businessId });
       return order;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
@@ -1189,7 +1190,7 @@ export const purchasingService = {
     };
 
     try {
-      await setDoc(doc(db, "businesses", businessId, "goodsReceivedNotes", id), grn);
+      await setDoc(doc(db, "businesses", businessId, "goodsReceivedNotes", id), { ...grn, businessId });
       return grn;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
