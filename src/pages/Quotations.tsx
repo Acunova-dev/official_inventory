@@ -741,12 +741,12 @@ export const Quotations: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 pb-6 border-b border-slate-100">
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
-                    <img src={logoImg} alt="Acu-invent Logo" className="h-8 w-auto object-contain rounded-md" />
-                    <span className="font-extrabold text-xl text-slate-950 tracking-tight">Acu-invent <span className="font-light text-slate-500 text-xs">Inventory Ltd</span></span>
+                    <img src={logoImg} alt="Acunova Logo" className="h-8 w-auto object-contain rounded-md" />
+                    <span className="font-extrabold text-xl text-slate-950 tracking-tight">Acunova Pvt Ltd <span className="font-light text-slate-500 text-xs"></span></span>
                   </div>
                   <p className="text-[11px] text-slate-400 font-medium font-sans">
-                    900 Technology Way, Suite 101, CA<br />
-                    Licence No: ACU-2026-CA | +1-800-555-8800
+                    70905 Lobengula West, Bulawayo, Zimbabwe<br />
+                    +263-715-436-611
                   </p>
                 </div>
 
@@ -769,7 +769,7 @@ export const Quotations: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase block mb-1">Status & Validity</span>
-                  <p className="text-xs font-bold text-slate-700">Account Owner: Acu-invent Systems</p>
+                  <p className="text-xs font-bold text-slate-700">Account Owner: Acunova Pvt Ltd</p>
                   <p className="text-xs mt-1">Validity Lock: <span className="font-semibold text-rose-600">30 Days reserved on hardware</span></p>
                 </div>
               </div>

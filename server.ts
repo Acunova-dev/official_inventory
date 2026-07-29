@@ -355,7 +355,7 @@ const initialDatabase: Database = {
         }
       ],
       subtotal: 5874,
-      taxRate: 0.15,
+      taxRate: 0,
       taxAmount: 881.1,
       discountRate: 0.1,
       discountAmount: 587.4,
@@ -381,11 +381,11 @@ const initialDatabase: Database = {
         }
       ],
       subtotal: 1299,
-      taxRate: 0.15,
-      taxAmount: 194.85,
+      taxRate: 0,
+      taxAmount: 0,
       discountRate: 0.0,
       discountAmount: 0.0,
-      total: 1493.85,
+      total: 1299,
       status: "Accepted",
       notes: "Education procurement code apply."
     }
@@ -414,38 +414,38 @@ const initialDatabase: Database = {
         }
       ],
       subtotal: 557,
-      taxRate: 0.15,
-      taxAmount: 83.55,
+      taxRate: 0,
+      taxAmount: 0,
       discountRate: 0.05,
       discountAmount: 27.85,
-      total: 612.7
+      total: 529.15
     }
   ],
   companySettings: {
-    companyName: "SHIELD HARDWARE",
-    companySubtitle: "SHIELD HARDWARE",
-    tagline: "Suppliers of Plumbing, Electrical & General Hardware",
+    companyName: "Acunova Pvt Ltd",
+    companySubtitle: "Acunova Pvt Ltd",
+    tagline: "Suppliers of High-Quality Electronics & Components",
     logoUrl: "",
-    logoInitials: "SH",
-    streetAddress: "NO. 57 FORT STREET",
+    logoInitials: "AN",
+    streetAddress: "70905 LOBENGULA WEST",
     city: "BULAWAYO",
     country: "ZIMBABWE",
-    address: "NO. 57 FORT STREET, BULAWAYO, ZIMBABWE",
-    email: "shieldhardware57@gmail.com",
-    phone: "+263 773 360 800",
+    address: "70905 Lobengula West, Bulawayo, Zimbabwe",
+    email: "acunovapvtltd@gmail.com",
+    phone: "+263 715 436 611",
     tel: "0",
-    mobile: "+263 773 360 800",
-    mobile2: "+263 715 503 400",
-    vatNumber: "220412593",
-    tinNumber: "2001804582",
-    registrationNumber: "2001804582",
-    bankName: "Stanbic Bank Bulawayo",
-    accountName: "Shield Hardware Pvt Ltd",
+    mobile: "+263 715 436 611",
+    mobile2: "+263 774 938 581",
+    vatNumber: "",
+    tinNumber: "2002535002",
+    registrationNumber: "",
+    bankName: "",
+    accountName: "Acunova Pvt Ltd",
     accountNumber: "9140001827461",
-    ecocashNumber: "*151*2*2*123456# / +263 773 360 800",
+    ecocashNumber: "+263 774 938 581",
     currency: "USD",
     salesType: "ALL",
-    doneBy: "LMAKONO",
+    doneBy: "Sales Dept",
     pdfHeaderColor: "#8b7355",
     footerTerms: "PRICES QUOTED IN USD DOLLAR. Official computer generated document.",
     quotationStyle: "minimalist_authentic"
@@ -1275,7 +1275,7 @@ function calculateCartTotals(
     taxRate = Math.max(0, tr);
   } else if (companySettings) {
     if (companySettings.enableVat) {
-      let tr = Number(companySettings.taxRate ?? 0.15);
+      let tr = Number(companySettings.taxRate ?? 0);
       if (tr > 1) tr = tr / 100;
       taxRate = Math.max(0, tr);
     } else {

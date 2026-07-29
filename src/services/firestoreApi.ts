@@ -609,7 +609,7 @@ export const quotationService = {
     const discountRate = payload.discountRate || 0;
     const discountAmount = subtotal * discountRate;
     const afterDiscount = subtotal - discountAmount;
-    const taxRate = payload.taxRate || 0.15;
+    const taxRate = payload.taxRate || 0;
     const taxAmount = afterDiscount * taxRate;
     const total = afterDiscount + taxAmount;
 
@@ -764,7 +764,7 @@ export const receiptService = {
     const discountRate = payload.discountRate || 0;
     const discountAmount = subtotal * discountRate;
     const afterDiscount = subtotal - discountAmount;
-    const taxRate = payload.taxRate || 0.15;
+    const taxRate = payload.taxRate || 0;
     const taxAmount = afterDiscount * taxRate;
     const total = afterDiscount + taxAmount;
 
@@ -1108,12 +1108,12 @@ export const purchasingService = {
         receivedQuantity: 0,
         unitCost,
         subtotal: itemSubtotal,
-        taxRate: 0.15,
-        total: itemSubtotal * 1.15
+        taxRate: 0,
+        total: itemSubtotal * 1.0
       });
     }
 
-    const taxAmount = subtotal * 0.15;
+    const taxAmount = subtotal * 0;
     const totalAmount = subtotal + taxAmount;
 
     const order: PurchaseOrder = {
