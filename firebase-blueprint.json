@@ -1,0 +1,257 @@
+{
+  "entities": {
+    "Business": {
+      "title": "Business",
+      "description": "Business organization entity owning inventory data",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "currency": { "type": "string", "maxLength": 10 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "ownerId"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile with role and business ownership",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "maxLength": 32 },
+        "disabled": { "type": "boolean" },
+        "lastLogin": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "email", "name", "businessId", "role"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product inventory item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 100 },
+        "sku": { "type": "string", "maxLength": 64 },
+        "barcode": { "type": "string", "maxLength": 64 },
+        "brand": { "type": "string", "maxLength": 100 },
+        "costPrice": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "quantity": { "type": "number" },
+        "minStock": { "type": "number" },
+        "location": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "maxLength": 32 },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "businessId", "name", "costPrice", "sellingPrice", "quantity"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "businessId", "name"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Inventory supplier entity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "email": { "type": "string", "maxLength": 128 },
+        "address": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "businessId", "name"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer entity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 150 },
+        "type": { "type": "string", "maxLength": 50 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "email": { "type": "string", "maxLength": 128 },
+        "address": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "businessId", "name"]
+    },
+    "StockMovement": {
+      "title": "StockMovement",
+      "description": "Stock audit movement record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productName": { "type": "string", "maxLength": 200 },
+        "movementType": { "type": "string", "maxLength": 50 },
+        "quantity": { "type": "number" },
+        "previousStock": { "type": "number" },
+        "newStock": { "type": "number" },
+        "reason": { "type": "string", "maxLength": 300 },
+        "referenceNumber": { "type": "string", "maxLength": 100 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "businessId", "productId", "movementType", "quantity", "previousStock", "newStock"]
+    },
+    "Quotation": {
+      "title": "Quotation",
+      "description": "Sales quotation document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "quotationNumber": { "type": "string", "maxLength": 64 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "customerEmail": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string" },
+        "expiryDate": { "type": "string" },
+        "subtotal": { "type": "number" },
+        "taxRate": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "discountRate": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "maxLength": 32 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "businessId", "quotationNumber", "customerId", "total", "status"]
+    },
+    "Receipt": {
+      "title": "Receipt",
+      "description": "Sales receipt document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "receiptNumber": { "type": "string", "maxLength": 64 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "date": { "type": "string" },
+        "subtotal": { "type": "number" },
+        "taxRate": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "discountRate": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string", "maxLength": 50 },
+        "referenceNumber": { "type": "string", "maxLength": 100 },
+        "approvalStatus": { "type": "string", "maxLength": 32 },
+        "createdBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "businessId", "receiptNumber", "customerId", "total"]
+    },
+    "SystemLog": {
+      "title": "SystemLog",
+      "description": "Audit system log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 64 },
+        "action": { "type": "string", "maxLength": 64 },
+        "userEmail": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 128 },
+        "userRole": { "type": "string", "maxLength": 64 },
+        "details": { "type": "string", "maxLength": 500 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "severity": { "type": "string", "maxLength": 32 },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "businessId", "category", "action", "details"]
+    },
+    "CompanySettings": {
+      "title": "CompanySettings",
+      "description": "Company profile configuration",
+      "type": "object",
+      "properties": {
+        "businessId": { "type": "string", "maxLength": 128 },
+        "companyName": { "type": "string", "maxLength": 128 },
+        "companySubtitle": { "type": "string", "maxLength": 128 },
+        "tagline": { "type": "string", "maxLength": 200 },
+        "logoUrl": { "type": "string", "maxLength": 500 },
+        "streetAddress": { "type": "string", "maxLength": 200 },
+        "city": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "email": { "type": "string", "maxLength": 128 },
+        "currency": { "type": "string", "maxLength": 10 }
+      },
+      "required": ["businessId", "companyName"]
+    }
+  },
+  "firestore": {
+    "/businesses/{businessId}": {
+      "schema": "Business",
+      "description": "Business organization profile"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile document"
+    },
+    "/businesses/{businessId}/products/{productId}": {
+      "schema": "Product",
+      "description": "Products owned by the business"
+    },
+    "/businesses/{businessId}/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Product categories"
+    },
+    "/businesses/{businessId}/suppliers/{supplierId}": {
+      "schema": "Supplier",
+      "description": "Suppliers"
+    },
+    "/businesses/{businessId}/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Customers"
+    },
+    "/businesses/{businessId}/stockMovements/{movementId}": {
+      "schema": "StockMovement",
+      "description": "Stock audit movements"
+    },
+    "/businesses/{businessId}/quotations/{quotationId}": {
+      "schema": "Quotation",
+      "description": "Quotation invoices"
+    },
+    "/businesses/{businessId}/receipts/{receiptId}": {
+      "schema": "Receipt",
+      "description": "Receipt payments"
+    },
+    "/businesses/{businessId}/systemLogs/{logId}": {
+      "schema": "SystemLog",
+      "description": "System log events"
+    },
+    "/businesses/{businessId}/settings/company": {
+      "schema": "CompanySettings",
+      "description": "Company setting profile"
+    }
+  }
+}
