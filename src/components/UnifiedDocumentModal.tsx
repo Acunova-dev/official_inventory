@@ -21,9 +21,11 @@ import {
   Receipt as ReceiptIcon
 } from "lucide-react";
 import { settingsService } from "../services/api";
+import { getMergedCompanySettings } from "../constants/defaultSettings";
 import { 
   SupportedDocumentType, 
   normalizeDocument, 
+  exportDocumentToPdf, 
   exportElementToPdf, 
   triggerDocumentPrint,
   PaperSize,
@@ -62,25 +64,27 @@ export const UnifiedDocumentModal: React.FC<UnifiedDocumentModalProps> = ({
 
   if (!isOpen || !document || !document.data) return null;
 
-  const currencyDefault = settings?.currency || "USD";
+  const companySettings = getMergedCompanySettings(settings);
+  const currencyDefault = companySettings.currency || "USD";
   const normDoc = normalizeDocument(document.type, document.data, currencyDefault);
 
   // Company Brand Data
-  const companyName = settings?.companyName || "VOLT ENTERPRISE SYSTEMS";
-  const tagline = settings?.tagline || "Wholesale, Procurement & Logistics Solutions";
-  const logoUrl = settings?.logoUrl;
-  const logoInitials = settings?.logoInitials || companyName.substring(0, 2).toUpperCase();
-  const streetAddress = settings?.streetAddress || "120 INDUSTRIAL PARKWAY, SUITE 400";
-  const city = settings?.city || "HARARE";
-  const country = settings?.country || "ZIMBABWE";
-  const email = settings?.email || "billing@voltsystems.co.zw";
-  const phone = settings?.mobile || settings?.phone || "+263 772 100 200";
-  const vatNumber = settings?.vatNumber || "VAT-9920148";
-  const tinNumber = settings?.tinNumber || settings?.registrationNumber || "TIN-100482910";
-  const bankName = settings?.bankName || "CBZ Bank Limited - Corporate Branch";
-  const accountName = settings?.accountName || companyName;
-  const accountNumber = settings?.accountNumber || "0112458920101";
-  const footerTerms = settings?.footerTerms || "Thank you for doing business with us. Official computer-generated document.";
+  const companyName = companySettings.companyName;
+  const tagline = companySettings.tagline;
+  const logoUrl = companySettings.logoUrl;
+  const logoInitials = companySettings.logoInitials;
+  const streetAddress = companySettings.streetAddress;
+  const city = companySettings.city;
+  const country = companySettings.country;
+  const email = companySettings.email;
+  const phone = companySettings.phone;
+  const vatNumber = companySettings.vatNumber;
+  const tinNumber = companySettings.tinNumber;
+  const bankName = companySettings.bankName;
+  const accountName = companySettings.accountName;
+  const accountNumber = companySettings.accountNumber;
+  const ecocashNumber = companySettings.ecocashNumber;
+  const footerTerms = companySettings.footerTerms;
 
   const printableElementId = `printable-doc-${normDoc.documentNumber.replace(/[^a-zA-Z0-9]/g, '-')}`;
   const fileName = `${companyName.replace(/\s+/g, '_')}_${normDoc.docType.toUpperCase()}_${normDoc.documentNumber}_${paperSize.toUpperCase()}.pdf`;
@@ -88,7 +92,7 @@ export const UnifiedDocumentModal: React.FC<UnifiedDocumentModalProps> = ({
   const handleDownloadPdf = async () => {
     try {
       setIsDownloading(true);
-      await exportElementToPdf(printableElementId, fileName, { paperSize, orientation });
+      await exportDocumentToPdf(normDoc, companySettings, fileName, { paperSize, orientation }, printableElementId);
     } catch (err) {
       console.error("Failed to export PDF:", err);
     } finally {

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Quotation, Receipt } from "../types";
 import { settingsService } from "../services/api";
+import { getMergedCompanySettings } from "../constants/defaultSettings";
 import { PrintConfirmationModal } from "./PrintConfirmationModal";
 
 interface PdfPreviewModalProps {
@@ -46,28 +47,29 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
 
   if (!isOpen || !document) return null;
 
-  const companyName = settings?.companyName || "SHIELD HARDWARE";
-  const companySubtitle = settings?.companySubtitle || "SHIELD HARDWARE";
-  const tagline = settings?.tagline || "Suppliers of Plumbing, Electrical & General Hardware";
-  const logoUrl = settings?.logoUrl;
-  const logoInitials = settings?.logoInitials || "SH";
-  const streetAddress = settings?.streetAddress || "NO. 57 FORT STREET";
-  const city = settings?.city || "BULAWAYO";
-  const country = settings?.country || "ZIMBABWE";
-  const email = settings?.email || "shieldhardware57@gmail.com";
-  const tel = settings?.tel || "0";
-  const mobile = settings?.mobile || settings?.phone || "+263 773 360 800";
-  const mobile2 = settings?.mobile2 || "+263 715 503 400";
-  const vatNumber = settings?.vatNumber || "220412593";
-  const tinNumber = settings?.tinNumber || settings?.registrationNumber || "2001804582";
-  const bankName = settings?.bankName || "Stanbic Bank Bulawayo";
-  const accountName = settings?.accountName || "Shield Hardware Pvt Ltd";
-  const accountNumber = settings?.accountNumber || "9140001827461";
-  const ecocashNumber = settings?.ecocashNumber || "*151*2*2*123456# / +263 773 360 800";
-  const currency = settings?.currency || "USD";
-  const salesType = settings?.salesType || "ALL";
-  const doneBy = settings?.doneBy || "LMAKONO";
-  const footerTerms = settings?.footerTerms || "PRICES QUOTED IN USD DOLLAR. Official computer generated document.";
+  const companySettings = getMergedCompanySettings(settings);
+  const companyName = companySettings.companyName;
+  const companySubtitle = companySettings.companySubtitle;
+  const tagline = companySettings.tagline;
+  const logoUrl = companySettings.logoUrl;
+  const logoInitials = companySettings.logoInitials;
+  const streetAddress = companySettings.streetAddress;
+  const city = companySettings.city;
+  const country = companySettings.country;
+  const email = companySettings.email;
+  const tel = companySettings.tel;
+  const mobile = companySettings.mobile;
+  const mobile2 = companySettings.mobile2;
+  const vatNumber = companySettings.vatNumber;
+  const tinNumber = companySettings.tinNumber;
+  const bankName = companySettings.bankName;
+  const accountName = companySettings.accountName;
+  const accountNumber = companySettings.accountNumber;
+  const ecocashNumber = companySettings.ecocashNumber;
+  const currency = companySettings.currency;
+  const salesType = companySettings.salesType;
+  const doneBy = companySettings.doneBy;
+  const footerTerms = companySettings.footerTerms;
 
   const isQuotation = document.type === "quotation";
   const quoteData = isQuotation ? (document.data as Quotation) : null;

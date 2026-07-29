@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { UnifiedDocumentModal } from "../components/UnifiedDocumentModal";
+import { getMergedCompanySettings } from "../constants/defaultSettings";
+import { normalizeDocument, exportDocumentToPdf } from "../utils/documentPrinter";
 
 const receiptFormSchema = z.object({
   customerId: z.string().min(1, { message: "Please select a checkout customer account." }),
@@ -185,18 +187,19 @@ export const Receipts: React.FC = () => {
     });
   };
 
-  // Instant receipt files downloader
-  const downloadSimulatedPdf = (rec: Receipt) => {
-    showToast("Generating system receipt PDF document...", "info");
-    setTimeout(() => {
-      const docHeader = `ACU-INVENT CASH RECEIPT\nReceipt Number: ${rec.receiptNumber}\nCustomer: ${rec.customerName}\nDate: ${rec.date}\nTotal Final Payment: $${rec.total.toFixed(2)}\nThank you for choosing Acu-invent!`;
-      const blob = new Blob([docHeader], { type: "text/plain" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `Acu_invent_Receipt_${rec.receiptNumber}.pdf`;
-      link.click();
-      showToast("Receipt document downloaded successfully!", "success");
-    }, 1200);
+  // PDF receipt document downloader
+  const downloadSimulatedPdf = async (rec: Receipt) => {
+    try {
+      showToast("Generating official receipt PDF...", "info");
+      const companySettings = getMergedCompanySettings(serverSettings);
+      const normDoc = normalizeDocument("receipt", rec, companySettings.currency || "USD");
+      const fileName = `${companySettings.companyName.replace(/\s+/g, '_')}_RECEIPT_${rec.receiptNumber}.pdf`;
+      await exportDocumentToPdf(normDoc, companySettings, fileName, { paperSize: "a4", orientation: "portrait" });
+      showToast("Receipt PDF downloaded successfully!", "success");
+    } catch (err: any) {
+      console.error("Failed to generate receipt PDF:", err);
+      showToast("Failed to generate receipt PDF.", "error");
+    }
   };
 
   const printDocument = () => {

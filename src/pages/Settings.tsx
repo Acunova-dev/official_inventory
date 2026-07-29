@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "../components/Layout";
 import { settingsService } from "../services/api";
 import { CompanySettings } from "../types";
+import { DEFAULT_COMPANY_SETTINGS, getMergedCompanySettings } from "../constants/defaultSettings";
 import { 
   Percent, 
   CloudLightning, 
@@ -40,71 +41,11 @@ export const Settings: React.FC = () => {
     queryFn: settingsService.get,
   });
 
-  const [formState, setFormState] = useState<CompanySettings>({
-    companyName: "SHIELD HARDWARE",
-    companySubtitle: "SHIELD HARDWARE",
-    tagline: "Suppliers of Plumbing, Electrical & General Hardware",
-    logoUrl: "",
-    logoInitials: "SH",
-    streetAddress: "NO. 57 FORT STREET",
-    city: "BULAWAYO",
-    country: "ZIMBABWE",
-    address: "NO. 57 FORT STREET, BULAWAYO, ZIMBABWE",
-    email: "shieldhardware57@gmail.com",
-    phone: "+263 773 360 800",
-    tel: "0",
-    mobile: "+263 773 360 800",
-    mobile2: "+263 715 503 400",
-    vatNumber: "220412593",
-    enableVat: false,
-    taxRate: 0,
-    tinNumber: "2001804582",
-    registrationNumber: "2001804582",
-    bankName: "Stanbic Bank Bulawayo",
-    accountName: "Shield Hardware Pvt Ltd",
-    accountNumber: "9140001827461",
-    ecocashNumber: "*151*2*2*123456# / +263 773 360 800",
-    currency: "USD",
-    salesType: "ALL",
-    doneBy: "LMAKONO",
-    pdfHeaderColor: "#8b7355",
-    footerTerms: "PRICES QUOTED IN USD DOLLAR. Official computer generated document.",
-    quotationStyle: "minimalist_authentic"
-  });
+  const [formState, setFormState] = useState<CompanySettings>(DEFAULT_COMPANY_SETTINGS);
 
   useEffect(() => {
     if (serverSettings) {
-      setFormState({
-        companyName: serverSettings.companyName || "SHIELD HARDWARE",
-        companySubtitle: serverSettings.companySubtitle || "SHIELD HARDWARE",
-        tagline: serverSettings.tagline || "Suppliers of Plumbing, Electrical & General Hardware",
-        logoUrl: serverSettings.logoUrl || "",
-        logoInitials: serverSettings.logoInitials || "SH",
-        streetAddress: serverSettings.streetAddress || "NO. 57 FORT STREET",
-        city: serverSettings.city || "BULAWAYO",
-        country: serverSettings.country || "ZIMBABWE",
-        address: serverSettings.address || "NO. 57 FORT STREET, BULAWAYO, ZIMBABWE",
-        email: serverSettings.email || "shieldhardware57@gmail.com",
-        phone: serverSettings.phone || "+263 773 360 800",
-        tel: serverSettings.tel || "0",
-        mobile: serverSettings.mobile || "+263 773 360 800",
-        mobile2: serverSettings.mobile2 || "+263 715 503 400",
-        vatNumber: serverSettings.vatNumber || "220412593",
-        enableVat: serverSettings.enableVat ?? false,
-        taxRate: serverSettings.taxRate !== undefined ? serverSettings.taxRate : 0,
-        tinNumber: serverSettings.tinNumber || "2001804582",
-        registrationNumber: serverSettings.registrationNumber || "2001804582",
-        bankName: serverSettings.bankName || "Stanbic Bank Bulawayo",
-        accountName: serverSettings.accountName || "Shield Hardware Pvt Ltd",
-        accountNumber: serverSettings.accountNumber || "9140001827461",
-        ecocashNumber: serverSettings.ecocashNumber || "*151*2*2*123456# / +263 773 360 800",
-        currency: serverSettings.currency || "USD",
-        salesType: serverSettings.salesType || "ALL",
-        doneBy: serverSettings.doneBy || "LMAKONO",
-        pdfHeaderColor: serverSettings.pdfHeaderColor || "#8b7355",
-        footerTerms: serverSettings.footerTerms || "PRICES QUOTED IN USD DOLLAR. Official computer generated document.",
-        quotationStyle: serverSettings.quotationStyle || "minimalist_authentic"
-      });
+      setFormState(getMergedCompanySettings(serverSettings));
     }
   }, [serverSettings]);
 

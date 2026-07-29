@@ -33,6 +33,8 @@ import {
   StockMovementItem
 } from "../types";
 
+import { DEFAULT_COMPANY_SETTINGS, getMergedCompanySettings } from "../constants/defaultSettings";
+
 // Helper for Firebase Storage upload
 export async function uploadImageToStorage(file: File, folder: string = "products"): Promise<string> {
   const fileExt = file.name.split(".").pop();
@@ -952,27 +954,14 @@ export const settingsService = {
     try {
       const snap = await getDoc(doc(db, "businesses", businessId, "settings", "company"));
       if (snap.exists()) {
-        return snap.data() as CompanySettings;
+        return getMergedCompanySettings(snap.data() as CompanySettings);
       }
-      const defaultSettings: CompanySettings = {
-        companyName: "Acu-invent Inventory Manager",
-        companySubtitle: "Inventory & Billing Systems",
-        tagline: "Precision Stock & Financial Auditing",
-        currency: "$",
-        address: "900 Technology Way, San Francisco, CA",
-        streetAddress: "900 Technology Way",
-        city: "San Francisco, CA",
-        phone: "+1-800-555-8800",
-        email: "support@acu-invent.com",
-        vatNumber: "VAT-998877",
-        registrationNumber: "REG-112233",
-        pdfHeaderColor: "#1e293b",
-        footerTerms: "Payment due within 30 days of invoice date."
-      };
+      const defaultSettings = DEFAULT_COMPANY_SETTINGS;
       await setDoc(doc(db, "businesses", businessId, "settings", "company"), defaultSettings);
       return defaultSettings;
     } catch (err) {
       handleFirestoreError(err, OperationType.GET, path);
+      return DEFAULT_COMPANY_SETTINGS;
     }
   },
 
@@ -982,9 +971,10 @@ export const settingsService = {
       const refDoc = doc(db, "businesses", businessId, "settings", "company");
       await setDoc(refDoc, data, { merge: true });
       const snap = await getDoc(refDoc);
-      return snap.data() as CompanySettings;
+      return getMergedCompanySettings(snap.data() as CompanySettings);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
+      return DEFAULT_COMPANY_SETTINGS;
     }
   }
 };

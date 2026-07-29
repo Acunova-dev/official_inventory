@@ -33,6 +33,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { UnifiedDocumentModal } from "../components/UnifiedDocumentModal";
 import { DocumentOcrModal } from "../components/DocumentOcrModal";
 import { PrintConfirmationModal } from "../components/PrintConfirmationModal";
+import { getMergedCompanySettings } from "../constants/defaultSettings";
+import { normalizeDocument, exportDocumentToPdf } from "../utils/documentPrinter";
 
 // Form validation schema
 const quotationFormSchema = z.object({
@@ -284,18 +286,19 @@ export const Quotations: React.FC = () => {
     createMutation.mutate(values);
   };
 
-  // Document download base64 simulator
-  const downloadSimulatedPdf = (quote: Quotation) => {
-    showToast("Generating secure corporate PDF invoice file...", "info");
-    setTimeout(() => {
-      const docHeader = `ACU-INVENT BILLING\nQuotation: ${quote.quotationNumber}\nCustomer: ${quote.customerName}\nDate: ${quote.date}\nTotal Amt: $${quote.total.toFixed(2)}`;
-      const blob = new Blob([docHeader], { type: "text/plain" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = `Acu_invent_${quote.quotationNumber}.pdf`;
-      link.click();
+  // PDF document generator & downloader
+  const downloadSimulatedPdf = async (quote: Quotation) => {
+    try {
+      showToast("Generating official quote PDF...", "info");
+      const companySettings = getMergedCompanySettings(serverSettings);
+      const normDoc = normalizeDocument("quotation", quote, companySettings.currency || "USD");
+      const fileName = `${companySettings.companyName.replace(/\s+/g, '_')}_QUOTATION_${quote.quotationNumber}.pdf`;
+      await exportDocumentToPdf(normDoc, companySettings, fileName, { paperSize: "a4", orientation: "portrait" });
       showToast("PDF document downloaded successfully!", "success");
-    }, 1500);
+    } catch (err: any) {
+      console.error("Failed to generate quote PDF:", err);
+      showToast("Failed to generate PDF quote.", "error");
+    }
   };
 
   const printDocument = () => {
