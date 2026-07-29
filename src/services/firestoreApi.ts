@@ -12,7 +12,7 @@ import {
   limit 
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage, handleFirestoreError, OperationType } from "../lib/firebase";
+import { db, auth, storage, handleFirestoreError, OperationType } from "../lib/firebase";
 import { 
   Product, 
   ProductResponse, 
@@ -433,12 +433,36 @@ export const customerService = {
   create: async (businessId: string, data: Omit<Customer, "id">): Promise<Customer> => {
     const id = `cust-${Date.now()}`;
     const path = `businesses/${businessId}/customers/${id}`;
+    const currUser = auth.currentUser;
+    const userUid = currUser?.uid || "unknown";
+    const userEmail = currUser?.email || "";
+    const userName = currUser?.displayName || (userEmail ? userEmail.split("@")[0] : "Staff");
+    const nowIso = new Date().toISOString();
+
     const customer: Customer = { id, ...data };
     try {
       await setDoc(doc(db, "businesses", businessId, "customers", id), {
         ...customer,
-        createdAt: new Date().toISOString(),
+        createdByUid: userUid,
+        createdByName: userName,
+        createdByEmail: userEmail,
+        createdAt: nowIso,
+        updatedByUid: userUid,
+        updatedByName: userName,
+        updatedByEmail: userEmail,
+        updatedAt: nowIso,
       });
+
+      await systemLogService.logAction(businessId, {
+        category: "System Settings",
+        action: "CUSTOMER_CREATED",
+        userEmail,
+        userName,
+        details: `Added new customer '${customer.name}' (${customer.type})`,
+        targetId: id,
+        severity: "info"
+      });
+
       return customer;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
@@ -448,10 +472,35 @@ export const customerService = {
   update: async (businessId: string, id: string, data: Partial<Customer>): Promise<Customer> => {
     const path = `businesses/${businessId}/customers/${id}`;
     try {
+      const currUser = auth.currentUser;
+      const userUid = currUser?.uid || "unknown";
+      const userEmail = currUser?.email || "";
+      const userName = currUser?.displayName || (userEmail ? userEmail.split("@")[0] : "Staff");
+      const nowIso = new Date().toISOString();
+
       const refDoc = doc(db, "businesses", businessId, "customers", id);
-      await updateDoc(refDoc, data);
+      const updateData = {
+        ...data,
+        updatedByUid: userUid,
+        updatedByName: userName,
+        updatedByEmail: userEmail,
+        updatedAt: nowIso
+      };
+      await updateDoc(refDoc, updateData);
       const snap = await getDoc(refDoc);
-      return { id: snap.id, ...snap.data() } as Customer;
+      const updatedCustomer = { id: snap.id, ...snap.data() } as Customer;
+
+      await systemLogService.logAction(businessId, {
+        category: "System Settings",
+        action: "CUSTOMER_UPDATED",
+        userEmail,
+        userName,
+        details: `Updated details for customer '${updatedCustomer.name}'`,
+        targetId: id,
+        severity: "info"
+      });
+
+      return updatedCustomer;
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
     }
@@ -609,9 +658,15 @@ export const quotationService = {
     const discountRate = payload.discountRate || 0;
     const discountAmount = subtotal * discountRate;
     const afterDiscount = subtotal - discountAmount;
-    const taxRate = payload.taxRate || 0;
+    const taxRate = payload.taxRate || 0.15;
     const taxAmount = afterDiscount * taxRate;
     const total = afterDiscount + taxAmount;
+
+    const currentUser = auth.currentUser;
+    const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "User");
+    const userEmail = currentUser?.email || "";
+    const userUid = currentUser?.uid || "unknown";
+    const nowIso = new Date().toISOString();
 
     const quote: Quotation = {
       id,
@@ -631,11 +686,30 @@ export const quotationService = {
       discountAmount,
       total,
       status: (payload.status as any) || "Draft",
-      notes: payload.notes || ""
+      notes: payload.notes || "",
+      createdByUid: userUid,
+      createdByName: userName,
+      createdByEmail: userEmail,
+      createdAt: nowIso,
+      updatedByUid: userUid,
+      updatedByName: userName,
+      updatedByEmail: userEmail,
+      updatedAt: nowIso
     };
 
     try {
       await setDoc(doc(db, "businesses", businessId, "quotations", id), { ...quote, businessId });
+      
+      await systemLogService.logAction(businessId, {
+        category: "Quotation Management",
+        action: "QUOTATION_CREATED",
+        userEmail,
+        userName,
+        details: `Created Quotation #${quotationNumber} for '${customerName}' (Total: $${total.toFixed(2)})`,
+        targetId: id,
+        severity: "info"
+      });
+
       return quote;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
@@ -656,10 +730,35 @@ export const quotationService = {
   update: async (businessId: string, id: string, payload: Partial<Quotation>): Promise<Quotation> => {
     const path = `businesses/${businessId}/quotations/${id}`;
     try {
+      const currentUser = auth.currentUser;
+      const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "User");
+      const userEmail = currentUser?.email || "";
+      const userUid = currentUser?.uid || "unknown";
+      const nowIso = new Date().toISOString();
+
       const refDoc = doc(db, "businesses", businessId, "quotations", id);
-      await updateDoc(refDoc, payload);
+      const updateData = {
+        ...payload,
+        updatedByUid: userUid,
+        updatedByName: userName,
+        updatedByEmail: userEmail,
+        updatedAt: nowIso
+      };
+      await updateDoc(refDoc, updateData);
       const snap = await getDoc(refDoc);
-      return { id: snap.id, ...snap.data() } as Quotation;
+      const updatedQuote = { id: snap.id, ...snap.data() } as Quotation;
+
+      await systemLogService.logAction(businessId, {
+        category: "Quotation Management",
+        action: payload.status ? `QUOTATION_STATUS_${payload.status.toUpperCase()}` : "QUOTATION_UPDATED",
+        userEmail,
+        userName,
+        details: `Updated Quotation #${updatedQuote.quotationNumber}${payload.status ? ` status to '${payload.status}'` : ""}`,
+        targetId: id,
+        severity: payload.status === "Accepted" ? "success" : "info"
+      });
+
+      return updatedQuote;
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
     }
@@ -764,9 +863,15 @@ export const receiptService = {
     const discountRate = payload.discountRate || 0;
     const discountAmount = subtotal * discountRate;
     const afterDiscount = subtotal - discountAmount;
-    const taxRate = payload.taxRate || 0;
+    const taxRate = payload.taxRate || 0.15;
     const taxAmount = afterDiscount * taxRate;
     const total = afterDiscount + taxAmount;
+
+    const currentUser = auth.currentUser;
+    const userUid = currentUser?.uid || "unknown";
+    const userEmail = currentUser?.email || "";
+    const activeUserName = currentUser?.displayName || (userEmail ? userEmail.split("@")[0] : userName);
+    const nowIso = new Date().toISOString();
 
     const receipt: Receipt = {
       id,
@@ -788,8 +893,16 @@ export const receiptService = {
       bankAccountId: payload.bankAccountId,
       referenceNumber: payload.referenceNumber || "",
       notes: payload.notes || "",
-      createdBy: userName,
-      createdDate: new Date().toISOString(),
+      createdBy: activeUserName,
+      createdByUid: userUid,
+      createdByName: activeUserName,
+      createdByEmail: userEmail,
+      createdDate: nowIso,
+      createdAt: nowIso,
+      updatedByUid: userUid,
+      updatedByName: activeUserName,
+      updatedByEmail: userEmail,
+      updatedAt: nowIso,
       approvalStatus: "Approved"
     };
 
@@ -799,8 +912,8 @@ export const receiptService = {
       await systemLogService.logAction(businessId, {
         category: "Receipt & Sales",
         action: "RECEIPT_CREATED",
-        userEmail: userName,
-        userName,
+        userEmail,
+        userName: activeUserName,
         userRole: "Staff",
         details: `Issued Sales Receipt #${receiptNumber} for $${total.toFixed(2)} to ${receipt.customerName}.`,
         targetId: id,
@@ -859,8 +972,34 @@ export const receiptService = {
         }
       }
 
-      await updateDoc(refDoc, { approvalStatus: "Reversed", reversalReason: reason });
-      return { ...receipt, approvalStatus: "Reversed", reversalReason: reason };
+      const currUser = auth.currentUser;
+      const userUid = currUser?.uid || "unknown";
+      const userEmail = currUser?.email || "";
+      const activeUserName = currUser?.displayName || (userEmail ? userEmail.split("@")[0] : userName);
+      const nowIso = new Date().toISOString();
+
+      const updateData = { 
+        approvalStatus: "Reversed" as const, 
+        reversalReason: reason,
+        updatedByUid: userUid,
+        updatedByName: activeUserName,
+        updatedByEmail: userEmail,
+        updatedAt: nowIso
+      };
+      await updateDoc(refDoc, updateData);
+
+      await systemLogService.logAction(businessId, {
+        category: "Receipt & Sales",
+        action: "RECEIPT_REVERSED",
+        userEmail,
+        userName: activeUserName,
+        userRole: "Staff",
+        details: `Reversed Receipt #${receipt.receiptNumber} (Reason: ${reason}). Stock quantities returned.`,
+        targetId: id,
+        severity: "warning",
+      });
+
+      return { ...receipt, ...updateData };
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
     }
@@ -977,13 +1116,24 @@ export const systemLogService = {
     }
   },
 
-  logAction: async (businessId: string, logData: Omit<SystemLog, "id" | "timestamp">): Promise<SystemLog> => {
+  logAction: async (businessId: string, logData: Partial<SystemLog> & Pick<SystemLog, "action" | "category" | "details">): Promise<SystemLog> => {
     const id = `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const path = `businesses/${businessId}/systemLogs/${id}`;
+    const currUser = auth.currentUser;
+    const defaultName = currUser?.displayName || (currUser?.email ? currUser.email.split("@")[0] : "System User");
+    const defaultEmail = currUser?.email || "user@business.internal";
+
     const logItem: SystemLog = {
-      ...logData,
       id,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      category: logData.category,
+      action: logData.action,
+      userEmail: logData.userEmail || defaultEmail,
+      userName: logData.userName || defaultName,
+      userRole: logData.userRole || "Staff",
+      details: logData.details,
+      targetId: logData.targetId,
+      severity: logData.severity || "info"
     };
     try {
       await setDoc(doc(db, "businesses", businessId, "systemLogs", id), { ...logItem, businessId });
@@ -1108,12 +1258,12 @@ export const purchasingService = {
         receivedQuantity: 0,
         unitCost,
         subtotal: itemSubtotal,
-        taxRate: 0,
-        total: itemSubtotal * 1.0
+        taxRate: 0.15,
+        total: itemSubtotal * 1.15
       });
     }
 
-    const taxAmount = subtotal * 0;
+    const taxAmount = subtotal * 0.15;
     const totalAmount = subtotal + taxAmount;
 
     const order: PurchaseOrder = {

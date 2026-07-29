@@ -418,6 +418,14 @@ export interface Quotation {
   total: number;
   status: "Draft" | "Sent" | "Accepted" | "Rejected" | "Expired";
   notes?: string;
+  createdByUid?: string;
+  createdByName?: string;
+  createdByEmail?: string;
+  createdAt?: string;
+  updatedByUid?: string;
+  updatedByName?: string;
+  updatedByEmail?: string;
+  updatedAt?: string;
 }
 
 export interface ReceiptLine {
@@ -451,7 +459,15 @@ export interface Receipt {
   relatedInvoiceIds?: string[];
   notes?: string;
   createdBy?: string;
+  createdByUid?: string;
+  createdByName?: string;
+  createdByEmail?: string;
   createdDate?: string;
+  createdAt?: string;
+  updatedByUid?: string;
+  updatedByName?: string;
+  updatedByEmail?: string;
+  updatedAt?: string;
   approvedBy?: string;
   approvalStatus?: "Draft" | "Approved" | "Reversed";
   reversalReason?: string;
