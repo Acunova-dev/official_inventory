@@ -34,6 +34,7 @@ import {
 } from "../types";
 
 import { DEFAULT_COMPANY_SETTINGS, getMergedCompanySettings } from "../constants/defaultSettings";
+import { ROLE_DEFINITIONS, AppRole } from "../types/rbac";
 
 // Helper for Firebase Storage upload
 export async function uploadImageToStorage(file: File, folder: string = "products"): Promise<string> {
@@ -1196,16 +1197,33 @@ export const userService = {
   create: async (businessId: string, data: Omit<User, "id" | "disabled">): Promise<User> => {
     const id = `usr-${Date.now()}`;
     const path = `users/${id}`;
+    const perms = data.customPermissions || ROLE_DEFINITIONS[data.role as AppRole]?.permissions || [];
     const newUser: User = {
       ...data,
       id,
       businessId,
       disabled: false,
       status: "Active",
+      customPermissions: perms,
       createdDate: new Date().toISOString()
     };
     try {
       await setDoc(doc(db, "users", id), newUser);
+      
+      const currUser = auth.currentUser;
+      const adminEmail = currUser?.email || "";
+      const adminName = currUser?.displayName || (adminEmail ? adminEmail.split("@")[0] : "Admin");
+
+      await systemLogService.logAction(businessId, {
+        category: "User Management",
+        action: "USER_PROVISIONED",
+        userEmail: adminEmail,
+        userName: adminName,
+        details: `Provisioned staff profile for '${newUser.name}' (${newUser.email}) with role '${newUser.role}'`,
+        targetId: id,
+        severity: "info"
+      });
+
       return newUser;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
@@ -1216,9 +1234,31 @@ export const userService = {
     const path = `users/${id}`;
     try {
       const refDoc = doc(db, "users", id);
-      await updateDoc(refDoc, data);
+      const updatePayload: Partial<User> = { ...data };
+      if (data.role && !data.customPermissions) {
+        updatePayload.customPermissions = ROLE_DEFINITIONS[data.role as AppRole]?.permissions || [];
+      }
+      await updateDoc(refDoc, updatePayload);
       const snap = await getDoc(refDoc);
-      return { id: snap.id, ...snap.data() } as User;
+      const updatedUser = { id: snap.id, ...snap.data() } as User;
+
+      const currUser = auth.currentUser;
+      const adminEmail = currUser?.email || "";
+      const adminName = currUser?.displayName || (adminEmail ? adminEmail.split("@")[0] : "Admin");
+
+      await systemLogService.logAction(businessId, {
+        category: "User Management",
+        action: data.disabled !== undefined ? "USER_STATUS_TOGGLED" : "USER_UPDATED",
+        userEmail: adminEmail,
+        userName: adminName,
+        details: data.disabled !== undefined 
+          ? `${data.disabled ? "Disabled" : "Restored"} account login access for '${updatedUser.name}'`
+          : `Updated user profile for '${updatedUser.name}' (${updatedUser.role})`,
+        targetId: id,
+        severity: data.disabled ? "warning" : "info"
+      });
+
+      return updatedUser;
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
     }

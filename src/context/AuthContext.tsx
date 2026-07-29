@@ -7,7 +7,7 @@ import {
   signOut as firebaseSignOut, 
   User as FirebaseUser 
 } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, query, where, getDocs, deleteDoc } from "firebase/firestore";
 import { auth, googleProvider, db, handleFirestoreError, OperationType } from "../lib/firebase";
 import { AuthUser } from "../types";
 import { ROLE_DEFINITIONS } from "../types/rbac";
@@ -54,48 +54,92 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setToken(idToken);
             }
           } else {
-            // First time Firebase Auth user - provision default business and user profile
-            const businessId = `biz-${firebaseUser.uid}`;
-            const businessName = `${firebaseUser.displayName || firebaseUser.email?.split("@")[0] || 'My'} Business`;
+            // Check if user account was pre-provisioned by an Administrator for an existing business
+            let preProvisionedUser: AuthUser | null = null;
+            if (firebaseUser.email) {
+              try {
+                const q = query(collection(db, "users"), where("email", "==", firebaseUser.email));
+                const qSnap = await getDocs(q);
+                if (!qSnap.empty) {
+                  const provDoc = qSnap.docs[0];
+                  const provData = provDoc.data() as AuthUser;
+                  preProvisionedUser = {
+                    ...provData,
+                    id: firebaseUser.uid,
+                    status: "Active",
+                    disabled: false,
+                    lastLogin: new Date().toISOString(),
+                    customPermissions: provData.customPermissions || ROLE_DEFINITIONS[provData.role as keyof typeof ROLE_DEFINITIONS]?.permissions
+                  };
+                  if (provDoc.id !== firebaseUser.uid) {
+                    try {
+                      await deleteDoc(doc(db, "users", provDoc.id));
+                    } catch (e) {
+                      console.warn("Could not delete temp provisioned user doc:", e);
+                    }
+                  }
+                }
+              } catch (e) {
+                console.warn("Pre-provisioned user check skipped:", e);
+              }
+            }
 
-            // Create Business
-            await setDoc(doc(db, "businesses", businessId), {
-              id: businessId,
-              name: businessName,
-              ownerId: firebaseUser.uid,
-              currency: "$",
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            });
+            if (preProvisionedUser) {
+              await setDoc(doc(db, "users", firebaseUser.uid), preProvisionedUser);
+              if (preProvisionedUser.disabled) {
+                await firebaseSignOut(auth);
+                setUser(null);
+                setToken(null);
+                setError("Account Disabled: Access suspended by Administrator.");
+              } else {
+                setUser(preProvisionedUser);
+                const idToken = await firebaseUser.getIdToken();
+                setToken(idToken);
+              }
+            } else {
+              // First time Firebase Auth user - provision default business and user profile
+              const businessId = `biz-${firebaseUser.uid}`;
+              const businessName = `${firebaseUser.displayName || firebaseUser.email?.split("@")[0] || 'My'} Business`;
 
-            // Create Company Settings
-            await setDoc(doc(db, "businesses", businessId, "settings", "company"), {
-              businessId,
-              companyName: businessName,
-              companySubtitle: "Inventory & Billing",
-              tagline: "Precision Stock Audit",
-              currency: "$",
-              email: firebaseUser.email || ""
-            });
+              // Create Business
+              await setDoc(doc(db, "businesses", businessId), {
+                id: businessId,
+                name: businessName,
+                ownerId: firebaseUser.uid,
+                currency: "$",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              });
 
-            // Create User Profile
-            const newUser: AuthUser = {
-              id: firebaseUser.uid,
-              name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Admin",
-              email: firebaseUser.email || "",
-              role: "Principal Admin",
-              businessId,
-              status: "Active",
-              disabled: false,
-              lastLogin: new Date().toISOString(),
-              createdDate: new Date().toISOString(),
-              customPermissions: ROLE_DEFINITIONS["Principal Admin"]?.permissions
-            };
+              // Create Company Settings
+              await setDoc(doc(db, "businesses", businessId, "settings", "company"), {
+                businessId,
+                companyName: businessName,
+                companySubtitle: "Inventory & Billing",
+                tagline: "Precision Stock Audit",
+                currency: "$",
+                email: firebaseUser.email || ""
+              });
 
-            await setDoc(doc(db, "users", firebaseUser.uid), newUser);
-            setUser(newUser);
-            const idToken = await firebaseUser.getIdToken();
-            setToken(idToken);
+              // Create User Profile
+              const newUser: AuthUser = {
+                id: firebaseUser.uid,
+                name: firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Admin",
+                email: firebaseUser.email || "",
+                role: "Principal Admin",
+                businessId,
+                status: "Active",
+                disabled: false,
+                lastLogin: new Date().toISOString(),
+                createdDate: new Date().toISOString(),
+                customPermissions: ROLE_DEFINITIONS["Principal Admin"]?.permissions
+              };
+
+              await setDoc(doc(db, "users", firebaseUser.uid), newUser);
+              setUser(newUser);
+              const idToken = await firebaseUser.getIdToken();
+              setToken(idToken);
+            }
           }
         } catch (err) {
           console.error("Error fetching Firebase Auth user profile:", err);
