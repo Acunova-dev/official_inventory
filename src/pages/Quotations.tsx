@@ -74,17 +74,30 @@ export const Quotations: React.FC = () => {
   const [isDirectPrintConfirmOpen, setIsDirectPrintConfirmOpen] = useState(false);
   const [directPrintData, setDirectPrintData] = useState<{ type: "quotation"; data: Quotation } | null>(null);
 
+  const getEnrichedQuote = (quote: Quotation): Quotation => {
+    const cust = customers.find(c => c.id === quote.customerId || c.name === quote.customerName);
+    return {
+      ...quote,
+      customerName: quote.customerName && quote.customerName !== "Customer" ? quote.customerName : (cust?.name || "Valued Customer"),
+      customerEmail: quote.customerEmail || cust?.email || "",
+      customerPhone: quote.customerPhone || cust?.phone || "",
+      customerAddress: quote.customerAddress || cust?.address || "",
+    };
+  };
+
   const openPdfPreviewModal = (quote: Quotation) => {
+    const enriched = getEnrichedQuote(quote);
     setPdfPreviewData({
       type: "quotation",
-      data: quote,
+      data: enriched,
       aiCoverNote: quote.id === selectedQuoteId ? aiCoverLetter : null,
     });
     setIsPreviewModalOpen(true);
   };
 
   const handleOpenDirectPrint = (quote: Quotation) => {
-    setDirectPrintData({ type: "quotation", data: quote });
+    const enriched = getEnrichedQuote(quote);
+    setDirectPrintData({ type: "quotation", data: enriched });
     setIsDirectPrintConfirmOpen(true);
   };
 
@@ -121,8 +134,13 @@ export const Quotations: React.FC = () => {
         let tr = data.taxRate || 0;
         effectiveTax = tr > 1 ? tr / 100 : tr;
       }
+      const selectedCust = customers.find(c => c.id === data.customerId);
       return quotationService.create({
         customerId: data.customerId,
+        customerName: selectedCust?.name,
+        customerEmail: selectedCust?.email,
+        customerPhone: selectedCust?.phone,
+        customerAddress: selectedCust?.address,
         items: data.items,
         discountRate: data.discountRate,
         taxRate: effectiveTax,
@@ -291,7 +309,8 @@ export const Quotations: React.FC = () => {
     try {
       showToast("Generating official quote PDF...", "info");
       const companySettings = getMergedCompanySettings(serverSettings);
-      const normDoc = normalizeDocument("quotation", quote, companySettings.currency || "USD");
+      const enrichedQuote = getEnrichedQuote(quote);
+      const normDoc = normalizeDocument("quotation", enrichedQuote, companySettings.currency || "USD");
       const fileName = `${companySettings.companyName.replace(/\s+/g, '_')}_QUOTATION_${quote.quotationNumber}.pdf`;
       await exportDocumentToPdf(normDoc, companySettings, fileName, { paperSize: "a4", orientation: "portrait" });
       showToast("PDF document downloaded successfully!", "success");

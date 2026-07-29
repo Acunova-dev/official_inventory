@@ -77,7 +77,9 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
 
   const docNumber = isQuotation ? quoteData?.quotationNumber : receiptData?.receiptNumber;
   const customerName = isQuotation ? quoteData?.customerName : receiptData?.customerName;
-  const customerEmail = isQuotation ? quoteData?.customerEmail : "customer@client.com";
+  const customerEmail = isQuotation ? quoteData?.customerEmail : receiptData?.customerEmail;
+  const customerPhone = isQuotation ? quoteData?.customerPhone : receiptData?.customerPhone;
+  const customerAddress = isQuotation ? quoteData?.customerAddress : receiptData?.customerAddress;
   const date = document.data.date;
   const lines = document.data.lines || [];
   const subtotal = document.data.subtotal || 0;
@@ -268,16 +270,26 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
             <div className="border border-amber-900/40 rounded-xl p-3.5 space-y-1 font-mono text-xs text-slate-900 bg-amber-50/10">
               <div className="flex gap-2">
                 <span className="text-slate-500 font-bold w-20">Customer:</span>
-                <span className="font-extrabold text-slate-950">{customerName}</span>
+                <span className="font-extrabold text-slate-950">{customerName || "Valued Customer"}</span>
               </div>
-              <div className="flex gap-2">
-                <span className="text-slate-500 font-bold w-20">Mobile:</span>
-                <span>{customerEmail || "N/A"}</span>
-              </div>
-              <div className="flex gap-2">
-                <span className="text-slate-500 font-bold w-20">VAT No:</span>
-                <span>-</span>
-              </div>
+              {customerAddress && (
+                <div className="flex gap-2">
+                  <span className="text-slate-500 font-bold w-20">Address:</span>
+                  <span>{customerAddress}</span>
+                </div>
+              )}
+              {customerPhone && (
+                <div className="flex gap-2">
+                  <span className="text-slate-500 font-bold w-20">Phone:</span>
+                  <span>{customerPhone}</span>
+                </div>
+              )}
+              {customerEmail && (
+                <div className="flex gap-2">
+                  <span className="text-slate-500 font-bold w-20">Email:</span>
+                  <span>{customerEmail}</span>
+                </div>
+              )}
             </div>
 
             {/* Document Metadata Box */}

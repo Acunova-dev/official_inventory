@@ -405,6 +405,8 @@ export interface Quotation {
   customerId: string;
   customerName: string;
   customerEmail: string;
+  customerPhone?: string;
+  customerAddress?: string;
   date: string;
   expiryDate: string;
   lines: QuotationLine[];
@@ -431,6 +433,9 @@ export interface Receipt {
   receiptNumber: string;
   customerId: string;
   customerName: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  customerAddress?: string;
   date: string;
   lines: ReceiptLine[];
   subtotal: number;

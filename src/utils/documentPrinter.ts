@@ -127,6 +127,9 @@ export function normalizeDocument(
         status: rec.approvalStatus || "Approved",
         partyLabel: "CUSTOMER / ACCOUNT DETAILS",
         partyName: rec.customerName,
+        partyEmail: rec.customerEmail,
+        partyPhone: rec.customerPhone,
+        partyAddress: rec.customerAddress,
         metaFields: [
           { label: "Payment Method", value: rec.paymentMethod || "Cash" },
           { label: "Bank Account", value: rec.bankAccountName || "N/A" },
@@ -247,10 +250,12 @@ export function normalizeDocument(
         partyLabel: "CUSTOMER DETAILS",
         partyName: q.customerName,
         partyEmail: q.customerEmail,
+        partyPhone: q.customerPhone,
+        partyAddress: q.customerAddress,
         metaFields: [
           { label: "Quotation #", value: q.quotationNumber },
           { label: "Date Issued", value: q.date },
-          { label: "Valid Until", value: "14 Days from date of issue" }
+          { label: "Valid Until", value: q.expiryDate || "14 Days from date of issue" }
         ],
         lines: (q.lines || []).map((line, idx) => ({
           id: line.productId || `q-line-${idx}`,
@@ -512,10 +517,11 @@ export async function generatePdfBlob(
   y += 6;
 
   // Customer / Party Box
+  const boxHeight = 26;
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(15, y, (pageWidth - 36) / 2, 22, 2, 2, "F");
+  doc.roundedRect(15, y, (pageWidth - 36) / 2, boxHeight, 2, 2, "F");
   doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(15, y, (pageWidth - 36) / 2, 22, 2, 2, "S");
+  doc.roundedRect(15, y, (pageWidth - 36) / 2, boxHeight, 2, 2, "S");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
@@ -523,16 +529,29 @@ export async function generatePdfBlob(
   doc.text(normDoc.partyLabel, 18, y + 5);
   doc.setFontSize(9.5);
   doc.setTextColor(15, 23, 42);
-  doc.text(normDoc.partyName, 18, y + 11);
+  doc.text(normDoc.partyName || "N/A", 18, y + 10);
+  
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  if (normDoc.partyEmail) doc.text(`Email: ${normDoc.partyEmail}`, 18, y + 16);
+  doc.setTextColor(71, 85, 105);
+  let partyY = y + 14.5;
+  if (normDoc.partyAddress) {
+    doc.text(normDoc.partyAddress.substring(0, 40), 18, partyY);
+    partyY += 3.8;
+  }
+  if (normDoc.partyPhone) {
+    doc.text(`Phone: ${normDoc.partyPhone}`, 18, partyY);
+    partyY += 3.8;
+  }
+  if (normDoc.partyEmail) {
+    doc.text(`Email: ${normDoc.partyEmail}`, 18, partyY);
+  }
 
   // Meta Fields Box (Right)
   const metaX = 15 + (pageWidth - 36) / 2 + 6;
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(metaX, y, (pageWidth - 36) / 2, 22, 2, 2, "F");
-  doc.roundedRect(metaX, y, (pageWidth - 36) / 2, 22, 2, 2, "S");
+  doc.roundedRect(metaX, y, (pageWidth - 36) / 2, boxHeight, 2, 2, "F");
+  doc.roundedRect(metaX, y, (pageWidth - 36) / 2, boxHeight, 2, 2, "S");
 
   let metaY = y + 5;
   normDoc.metaFields.slice(0, 3).forEach(meta => {

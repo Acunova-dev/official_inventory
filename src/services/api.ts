@@ -197,7 +197,7 @@ export const quotationService = {
   calculate: async (payload: { items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number }): Promise<Omit<Quotation, "id" | "quotationNumber" | "customerId" | "customerName" | "customerEmail" | "date" | "expiryDate" | "status">> => {
     return fsQuotationService.calculate(payload);
   },
-  create: async (payload: { customerId: string; customerName?: string; customerEmail?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; notes?: string; status?: string }): Promise<Quotation> => {
+  create: async (payload: { customerId: string; customerName?: string; customerEmail?: string; customerPhone?: string; customerAddress?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; notes?: string; status?: string }): Promise<Quotation> => {
     const bId = await getActiveBusinessId();
     return fsQuotationService.create(bId, payload);
   },
@@ -226,7 +226,7 @@ export const receiptService = {
   calculate: async (payload: { items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number }): Promise<Omit<Receipt, "id" | "receiptNumber" | "customerId" | "customerName" | "date">> => {
     return fsReceiptService.calculate(payload);
   },
-  create: async (payload: { customerId: string; customerName?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; paymentMethod?: string; bankAccountId?: string; referenceNumber?: string; notes?: string }): Promise<Receipt> => {
+  create: async (payload: { customerId: string; customerName?: string; customerEmail?: string; customerPhone?: string; customerAddress?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; paymentMethod?: string; bankAccountId?: string; referenceNumber?: string; notes?: string }): Promise<Receipt> => {
     const bId = await getActiveBusinessId();
     const userName = auth.currentUser?.displayName || auth.currentUser?.email || "Cashier";
     return fsReceiptService.create(bId, payload, userName);

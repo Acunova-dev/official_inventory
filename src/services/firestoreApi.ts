@@ -555,11 +555,33 @@ export const quotationService = {
     };
   },
 
-  create: async (businessId: string, payload: { customerId: string; customerName?: string; customerEmail?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; notes?: string; status?: string }): Promise<Quotation> => {
+  create: async (businessId: string, payload: { customerId: string; customerName?: string; customerEmail?: string; customerPhone?: string; customerAddress?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; notes?: string; status?: string }): Promise<Quotation> => {
     const id = `quote-${Date.now()}`;
     const quotationNumber = `QT-${Date.now().toString().slice(-6)}`;
     const path = `businesses/${businessId}/quotations/${id}`;
     
+    let customerName = payload.customerName || "";
+    let customerEmail = payload.customerEmail || "";
+    let customerPhone = payload.customerPhone || "";
+    let customerAddress = payload.customerAddress || "";
+
+    if (payload.customerId) {
+      try {
+        const custSnap = await getDoc(doc(db, "businesses", businessId, "customers", payload.customerId));
+        if (custSnap.exists()) {
+          const cust = custSnap.data() as Customer;
+          if (!customerName || customerName === "Customer") customerName = cust.name;
+          if (!customerEmail) customerEmail = cust.email || "";
+          if (!customerPhone) customerPhone = cust.phone || "";
+          if (!customerAddress) customerAddress = cust.address || "";
+        }
+      } catch (err) {
+        console.warn("Could not fetch customer details for quote creation:", err);
+      }
+    }
+
+    if (!customerName) customerName = "Valued Customer";
+
     const lines = [];
     let subtotal = 0;
 
@@ -595,8 +617,10 @@ export const quotationService = {
       id,
       quotationNumber,
       customerId: payload.customerId,
-      customerName: payload.customerName || "Customer",
-      customerEmail: payload.customerEmail || "",
+      customerName,
+      customerEmail,
+      customerPhone,
+      customerAddress,
       date: new Date().toISOString().split("T")[0],
       expiryDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
       lines,
@@ -670,10 +694,32 @@ export const receiptService = {
     return quotationService.calculate(payload);
   },
 
-  create: async (businessId: string, payload: { customerId: string; customerName?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; paymentMethod?: string; bankAccountId?: string; referenceNumber?: string; notes?: string }, userName: string = "Cashier"): Promise<Receipt> => {
+  create: async (businessId: string, payload: { customerId: string; customerName?: string; customerEmail?: string; customerPhone?: string; customerAddress?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; paymentMethod?: string; bankAccountId?: string; referenceNumber?: string; notes?: string }, userName: string = "Cashier"): Promise<Receipt> => {
     const id = `rec-${Date.now()}`;
     const receiptNumber = `REC-${Date.now().toString().slice(-6)}`;
     const path = `businesses/${businessId}/receipts/${id}`;
+
+    let customerName = payload.customerName || "";
+    let customerEmail = payload.customerEmail || "";
+    let customerPhone = payload.customerPhone || "";
+    let customerAddress = payload.customerAddress || "";
+
+    if (payload.customerId) {
+      try {
+        const custSnap = await getDoc(doc(db, "businesses", businessId, "customers", payload.customerId));
+        if (custSnap.exists()) {
+          const cust = custSnap.data() as Customer;
+          if (!customerName || customerName === "Customer") customerName = cust.name;
+          if (!customerEmail) customerEmail = cust.email || "";
+          if (!customerPhone) customerPhone = cust.phone || "";
+          if (!customerAddress) customerAddress = cust.address || "";
+        }
+      } catch (err) {
+        console.warn("Could not fetch customer info for receipt creation:", err);
+      }
+    }
+
+    if (!customerName) customerName = "Valued Customer";
 
     const lines = [];
     let subtotal = 0;
@@ -726,7 +772,10 @@ export const receiptService = {
       id,
       receiptNumber,
       customerId: payload.customerId,
-      customerName: payload.customerName || "Customer",
+      customerName,
+      customerEmail,
+      customerPhone,
+      customerAddress,
       date: new Date().toISOString().split("T")[0],
       lines,
       subtotal,
