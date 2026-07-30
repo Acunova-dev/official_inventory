@@ -277,7 +277,7 @@ export const Settings: React.FC = () => {
                     value={formState.companyName}
                     onChange={handleInputChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    placeholder="e.g. SHIELD HARDWARE"
+                    placeholder="e.g. Acunova Pvt Ltd"
                   />
                 </div>
 
@@ -289,7 +289,7 @@ export const Settings: React.FC = () => {
                     value={formState.companySubtitle}
                     onChange={handleInputChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    placeholder="e.g. SHIELD HARDWARE"
+                    placeholder="e.g. Electronics & Components Supplier"
                   />
                 </div>
 
@@ -301,7 +301,7 @@ export const Settings: React.FC = () => {
                     value={formState.tagline}
                     onChange={handleInputChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    placeholder="e.g. Suppliers of Plumbing, Electrical & General Hardware"
+                    placeholder="e.g. Suppliers of High-Quality Electronics & Components"
                   />
                 </div>
               </div>
@@ -323,7 +323,7 @@ export const Settings: React.FC = () => {
                     value={formState.streetAddress || ""}
                     onChange={handleInputChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    placeholder="e.g. NO. 57 FORT STREET"
+                    placeholder="e.g. Lobengula West"
                   />
                 </div>
 
@@ -335,7 +335,7 @@ export const Settings: React.FC = () => {
                     value={formState.city || ""}
                     onChange={handleInputChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    placeholder="e.g. BULAWAYO"
+                    placeholder="e.g. Bulawayo"
                   />
                 </div>
 
@@ -347,7 +347,7 @@ export const Settings: React.FC = () => {
                     value={formState.country || ""}
                     onChange={handleInputChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    placeholder="e.g. ZIMBABWE"
+                    placeholder="e.g. Zimbabwe"
                   />
                 </div>
               </div>
@@ -381,7 +381,7 @@ export const Settings: React.FC = () => {
                     value={formState.mobile || ""}
                     onChange={handleInputChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    placeholder="e.g. +263 773 360 800"
+                    placeholder="e.g. +263 715 436 611"
                   />
                 </div>
 
@@ -393,7 +393,7 @@ export const Settings: React.FC = () => {
                     value={formState.mobile2 || ""}
                     onChange={handleInputChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    placeholder="e.g. +263 715 503 400"
+                    placeholder="e.g. +263 774 938 581"
                   />
                 </div>
 
@@ -405,7 +405,7 @@ export const Settings: React.FC = () => {
                     value={formState.email}
                     onChange={handleInputChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    placeholder="shieldhardware57@gmail.com"
+                    placeholder="acunovapvtltd@gmail.com"
                   />
                 </div>
               </div>
@@ -416,72 +416,32 @@ export const Settings: React.FC = () => {
               <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                 <div className="flex items-center gap-2">
                   <Percent size={16} className="text-blue-600" />
-                  <h3 className="font-bold text-xs uppercase tracking-wider text-slate-900">5. Tax & VAT Configuration</h3>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label htmlFor="enableVatToggle" className="text-xs font-bold text-slate-700 cursor-pointer">
-                    Charge VAT / Sales Tax
-                  </label>
-                  <input
-                    id="enableVatToggle"
-                    type="checkbox"
-                    checked={!!formState.enableVat}
-                    onChange={(e) => setFormState(prev => ({ ...prev, enableVat: e.target.checked }))}
-                    className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
-                  />
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-slate-900">5. Registration & Identifiers</h3>
                 </div>
               </div>
 
-              <div className="bg-blue-50/80 border border-blue-200/80 p-3 rounded-lg text-xs text-blue-900 leading-relaxed font-sans">
-                💡 <strong>Tax Exemption / New Business Mode:</strong> If your business is new and not yet registered or liable to charge VAT, leave <strong>Charge VAT</strong> turned <strong>OFF</strong>. All quotes & receipts will render with 0% tax ($0.00). When your business scales and becomes VAT-registered, toggle it <strong>ON</strong> and enter your official tax rate below.
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Default Tax Rate (%)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      max="100"
-                      name="taxRate"
-                      disabled={!formState.enableVat}
-                      value={formState.enableVat ? (formState.taxRate !== undefined ? formState.taxRate : 15) : 0}
-                      onChange={(e) => setFormState(prev => ({ ...prev, taxRate: parseFloat(e.target.value) || 0 }))}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-400"
-                      placeholder="e.g. 15 or 0"
-                    />
-                    <span className="absolute right-3 top-2.5 text-xs font-mono text-slate-400 font-bold">%</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">VAT Reg No</label>
-                  <input
-                    type="text"
-                    name="vatNumber"
-                    value={formState.vatNumber}
-                    onChange={handleInputChange}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    placeholder="220412593"
-                  />
-                </div>
-
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">TIN No / Tax ID</label>
                   <input
                     type="text"
                     name="tinNumber"
-                    value={formState.tinNumber || formState.registrationNumber || ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFormState(prev => ({ ...prev, tinNumber: val, registrationNumber: val }));
-                    }}
+                    value={formState.tinNumber}
+                    onChange={handleInputChange}
                     className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    placeholder="2001804582"
+                    placeholder="2002535002"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Company Registration No</label>
+                  <input
+                    type="text"
+                    name="registrationNumber"
+                    value={formState.registrationNumber}
+                    onChange={handleInputChange}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    placeholder="e.g. REG-112233"
                   />
                 </div>
               </div>
@@ -666,17 +626,19 @@ export const Settings: React.FC = () => {
                     <div className="flex justify-end gap-2">
                       <span className="text-slate-500 font-bold">Mobile:</span>
                       <div className="text-right">
-                        <p>{formState.mobile || "+263 773 360 800"}</p>
+                        <p>{formState.mobile || "+263 715 436 611"}</p>
                         {formState.mobile2 && <p>{formState.mobile2}</p>}
                       </div>
                     </div>
-                    <div className="flex justify-end gap-2 pt-1">
-                      <span className="text-slate-500 font-bold">VAT No:</span>
-                      <span>{formState.vatNumber || "220412593"}</span>
-                    </div>
+                    {formState.vatNumber && (
+                      <div className="flex justify-end gap-2 pt-1">
+                        <span className="text-slate-500 font-bold">VAT No:</span>
+                        <span>{formState.vatNumber}</span>
+                      </div>
+                    )}
                     <div className="flex justify-end gap-2">
                       <span className="text-slate-500 font-bold">TIN No:</span>
-                      <span>{formState.tinNumber || formState.registrationNumber || "2001804582"}</span>
+                      <span>{formState.tinNumber || formState.registrationNumber || "2002535002"}</span>
                     </div>
                   </div>
 
@@ -740,9 +702,8 @@ export const Settings: React.FC = () => {
                         <th className="py-1">Item Code</th>
                         <th className="py-1">Item Description</th>
                         <th className="py-1 text-center">Quantity</th>
-                        <th className="py-1 text-right">Price (Incl)</th>
-                        <th className="py-1 text-right">Tax</th>
-                        <th className="py-1 text-right">Total (Incl)</th>
+                        <th className="py-1 text-right">Price</th>
+                        <th className="py-1 text-right">Total</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-900">
@@ -751,7 +712,6 @@ export const Settings: React.FC = () => {
                         <td className="py-1 font-sans font-semibold">500ML WOOD GLUE</td>
                         <td className="py-1 text-center">1.00</td>
                         <td className="py-1 text-right">2.00</td>
-                        <td className="py-1 text-right">0.27</td>
                         <td className="py-1 text-right font-bold">2.00</td>
                       </tr>
                       <tr>
@@ -759,7 +719,6 @@ export const Settings: React.FC = () => {
                         <td className="py-1 font-sans font-semibold">BLACK SPRAY PAINT</td>
                         <td className="py-1 text-center">3.00</td>
                         <td className="py-1 text-right">2.00</td>
-                        <td className="py-1 text-right">0.81</td>
                         <td className="py-1 text-right font-bold">6.00</td>
                       </tr>
                     </tbody>
@@ -795,24 +754,14 @@ export const Settings: React.FC = () => {
 
         </div>
 
-        {/* Existing Core Tax & System Status Cards */}
+        {/* System Configuration Status Card */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white rounded-2xl border border-slate-200/90 p-6 space-y-4 shadow-3xs">
             <div className="flex items-center gap-2 pb-3 border-b border-slate-100 text-slate-900">
               <Percent size={18} className="text-blue-500" />
-              <h3 className="font-extrabold text-xs uppercase tracking-wider">Tax & Margin Default Configurations</h3>
+              <h3 className="font-extrabold text-xs uppercase tracking-wider">System Default Configurations</h3>
             </div>
             <div className="space-y-3 text-xs font-medium">
-              <div>
-                <label className="block text-slate-400 font-bold uppercase text-[10px] mb-1">Standard VAT Tax Rate (%)</label>
-                <input
-                  type="text"
-                  disabled
-                  value="15.0 %"
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-500 rounded-xl p-2.5 font-mono cursor-not-allowed font-bold"
-                />
-                <span className="text-[10px] text-slate-400 block mt-1">Authoritative tax locked for current California state Node.</span>
-              </div>
               <div>
                 <label className="block text-slate-400 font-bold uppercase text-[10px] mb-1">Quotation Valid Days Limit</label>
                 <select

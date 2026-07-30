@@ -374,10 +374,10 @@ export function getEnrichedReceipts(receipts: Receipt[], products: Product[]): R
 
       const subtotal = lines.reduce((acc, l) => acc + l.totalPrice, 0);
       const taxRate = 0;
-      const taxAmount = subtotal * taxRate;
+      const taxAmount = 0;
       const discountRate = idx % 4 === 0 ? 0.05 : 0;
       const discountAmount = subtotal * discountRate;
-      const total = subtotal + taxAmount - discountAmount;
+      const total = subtotal - discountAmount;
 
       enriched.push({
         id: `rc-gen-${idx}`,

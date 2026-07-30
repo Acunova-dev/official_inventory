@@ -111,7 +111,7 @@ export function normalizeDocument(
         currency,
         subtotal: po.subtotal || po.totalAmount,
         discountAmount: 0,
-        taxAmount: po.taxAmount || 0,
+        taxAmount: 0,
         totalAmount: po.totalAmount,
         preparedBy: po.createdBy,
         approvedBy: po.approvedBy || "Procurement Mgr",
@@ -149,7 +149,7 @@ export function normalizeDocument(
         currency,
         subtotal: rec.subtotal,
         discountAmount: rec.discountAmount || 0,
-        taxAmount: rec.taxAmount || 0,
+        taxAmount: 0,
         totalAmount: rec.total,
         paymentMethod: rec.paymentMethod,
         bankAccountName: rec.bankAccountName,
@@ -270,7 +270,7 @@ export function normalizeDocument(
         currency,
         subtotal: q.subtotal,
         discountAmount: q.discountAmount || 0,
-        taxAmount: q.taxAmount || 0,
+        taxAmount: 0,
         totalAmount: q.total,
         preparedBy: "Sales Department",
         notes: q.notes
@@ -296,7 +296,7 @@ export function normalizeDocument(
 
       return {
         docType: "invoice",
-        title: "TAX INVOICE",
+        title: "SALES INVOICE",
         documentNumber: inv.invoiceNumber,
         date: inv.date,
         status: inv.status || "Issued",
@@ -317,7 +317,7 @@ export function normalizeDocument(
         currency,
         subtotal: inv.subtotal,
         discountAmount: inv.discountAmount || 0,
-        taxAmount: inv.taxAmount || 0,
+        taxAmount: 0,
         totalAmount: inv.total,
         preparedBy: inv.createdByName || "Accounts Department",
         notes: [inv.notes, inv.termsAndConditions].filter(Boolean).join("\n\nTerms & Conditions: ")
@@ -539,7 +539,7 @@ export async function generatePdfBlob(
   doc.setFontSize(8);
   doc.text(`${settings.streetAddress}, ${settings.city}, ${settings.country}`, headerX, y + 15);
   doc.text(`Tel: ${settings.phone} | Email: ${settings.email}`, headerX, y + 19);
-  doc.text(`VAT Reg: ${settings.vatNumber} | TIN: ${settings.tinNumber}`, headerX, y + 23);
+  doc.text(`TIN: ${settings.tinNumber}`, headerX, y + 23);
 
   // Document Title & Number (Right Side)
   const rightX = pageWidth - 15;

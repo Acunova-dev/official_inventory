@@ -355,11 +355,11 @@ const initialDatabase: Database = {
         }
       ],
       subtotal: 5874,
-      taxRate: 0.15,
-      taxAmount: 881.1,
+      taxRate: 0,
+      taxAmount: 0,
       discountRate: 0.1,
       discountAmount: 587.4,
-      total: 6167.7,
+      total: 5286.6,
       status: "Sent",
       notes: "Alpha Tech custom pricing program. Validity 30 days."
     },
@@ -381,11 +381,11 @@ const initialDatabase: Database = {
         }
       ],
       subtotal: 1299,
-      taxRate: 0.15,
-      taxAmount: 194.85,
+      taxRate: 0,
+      taxAmount: 0,
       discountRate: 0.0,
       discountAmount: 0.0,
-      total: 1493.85,
+      total: 1299,
       status: "Accepted",
       notes: "Education procurement code apply."
     }
@@ -414,11 +414,11 @@ const initialDatabase: Database = {
         }
       ],
       subtotal: 557,
-      taxRate: 0.15,
-      taxAmount: 83.55,
+      taxRate: 0,
+      taxAmount: 0,
       discountRate: 0.05,
       discountAmount: 27.85,
-      total: 612.7
+      total: 529.15
     }
   ],
   companySettings: {
@@ -1269,22 +1269,6 @@ function calculateCartTotals(
   companySettings?: CompanySettings
 ) {
   let taxRate = 0;
-  if (taxRateInput !== undefined && taxRateInput !== null && taxRateInput !== "") {
-    let tr = Number(taxRateInput);
-    if (tr > 1) tr = tr / 100; // e.g. 15 -> 0.15
-    taxRate = Math.max(0, tr);
-  } else if (companySettings) {
-    if (companySettings.enableVat) {
-      let tr = Number(companySettings.taxRate ?? 0.15);
-      if (tr > 1) tr = tr / 100;
-      taxRate = Math.max(0, tr);
-    } else {
-      taxRate = 0;
-    }
-  } else {
-    taxRate = 0;
-  }
-
   const lines: any[] = [];
   let subtotal = 0;
 
@@ -1308,8 +1292,8 @@ function calculateCartTotals(
 
   const discountAmount = Number((subtotal * discountRate).toFixed(2));
   const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
-  const taxAmount = Number((subtotalAfterDiscount * taxRate).toFixed(2));
-  const total = Number((subtotalAfterDiscount + taxAmount).toFixed(2));
+  const taxAmount = 0;
+  const total = Number(subtotalAfterDiscount.toFixed(2));
 
   return {
     lines,

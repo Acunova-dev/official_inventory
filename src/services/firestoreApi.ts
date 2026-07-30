@@ -598,9 +598,9 @@ export const quotationService = {
     }
     const discountAmount = subtotal * (payload.discountRate || 0);
     const afterDiscount = subtotal - discountAmount;
-    const taxRate = payload.taxRate || 0;
-    const taxAmount = afterDiscount * taxRate;
-    const total = afterDiscount + taxAmount;
+    const taxRate = 0;
+    const taxAmount = 0;
+    const total = afterDiscount;
     return {
       lines: payload.items.map(i => ({ productId: i.productId, productName: "Product", quantity: i.quantity, unitPrice: 100, totalPrice: i.quantity * 100 })),
       subtotal,
@@ -666,9 +666,9 @@ export const quotationService = {
     const discountRate = payload.discountRate || 0;
     const discountAmount = subtotal * discountRate;
     const afterDiscount = subtotal - discountAmount;
-    const taxRate = payload.taxRate || 0.15;
-    const taxAmount = afterDiscount * taxRate;
-    const total = afterDiscount + taxAmount;
+    const taxRate = 0;
+    const taxAmount = 0;
+    const total = afterDiscount;
 
     const currentUser = auth.currentUser;
     const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "User");
@@ -1281,9 +1281,9 @@ export const receiptService = {
     const discountRate = payload.discountRate || 0;
     const discountAmount = subtotal * discountRate;
     const afterDiscount = subtotal - discountAmount;
-    const taxRate = payload.taxRate || 0.15;
-    const taxAmount = afterDiscount * taxRate;
-    const total = afterDiscount + taxAmount;
+    const taxRate = 0;
+    const taxAmount = 0;
+    const total = afterDiscount;
 
     let bankAccountName = "";
     if (payload.bankAccountId) {
@@ -1593,9 +1593,9 @@ export const invoiceService = {
     const discountRate = payload.discountRate || 0;
     const discountAmount = subtotal * discountRate;
     const afterDiscount = subtotal - discountAmount;
-    const taxRate = payload.taxRate || 0.15;
-    const taxAmount = afterDiscount * taxRate;
-    const total = afterDiscount + taxAmount;
+    const taxRate = 0;
+    const taxAmount = 0;
+    const total = afterDiscount;
 
     const currentUser = auth.currentUser;
     const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "Admin");
@@ -2132,13 +2132,13 @@ export const purchasingService = {
         receivedQuantity: 0,
         unitCost,
         subtotal: itemSubtotal,
-        taxRate: 0.15,
-        total: itemSubtotal * 1.15
+        taxRate: 0,
+        total: itemSubtotal
       });
     }
 
-    const taxAmount = subtotal * 0.15;
-    const totalAmount = subtotal + taxAmount;
+    const taxAmount = 0;
+    const totalAmount = subtotal;
 
     const order: PurchaseOrder = {
       id,

@@ -88,6 +88,7 @@ export const Receipts: React.FC = () => {
     queryKey: ["company-settings"],
     queryFn: () => settingsService.get(),
   });
+  const mergedSettings = getMergedCompanySettings(serverSettings);
 
   const { data: bankAccounts = [] } = useQuery({
     queryKey: ["bankAccounts"],
@@ -563,12 +564,12 @@ export const Receipts: React.FC = () => {
             
             <div className="text-center space-y-2 pb-6 border-b border-dashed border-slate-200">
               <div className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-100 uppercase font-black text-[10px] tracking-widest text-emerald-700 px-3 py-1 rounded-full">
-                ★★★ OFFICIAL PAID TAX RECEIPT ★★★
+                ★★★ OFFICIAL SALES RECEIPT ★★★
               </div>
-              <h2 className="text-2xl font-black text-slate-950 tracking-tight">Acu-invent Systems Corp</h2>
+              <h2 className="text-2xl font-black text-slate-950 tracking-tight">{mergedSettings.companyName}</h2>
               <p className="text-xs text-slate-400 font-medium leading-relaxed">
-                70950 Lobengula West, Bulawayo<br />
-                Ph: +263 71 543 6611 | GST ID: CA-8892401-ACU
+                {mergedSettings.address}<br />
+                Ph: {mergedSettings.phone}
               </p>
             </div>
 
@@ -620,10 +621,6 @@ export const Receipts: React.FC = () => {
                   <span className="text-rose-500">-${selectedReceipt.discountAmount.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-slate-400">
-                <span>Calculated VAT (15%)</span>
-                <span>+${selectedReceipt.taxAmount.toFixed(2)}</span>
-              </div>
               <div className="border-t border-slate-200 my-2 pt-2 flex justify-between items-center text-sm font-black">
                 <span className="font-sans text-slate-400 uppercase tracking-wider text-xs">TOTAL FINAL SURPLUS PAID</span>
                 <span className="text-2xl text-emerald-600 font-mono">${selectedReceipt.total.toFixed(2)}</span>
@@ -631,7 +628,7 @@ export const Receipts: React.FC = () => {
             </div>
 
             <div className="text-center pt-8 border-t border-slate-100">
-              <p className="text-xs font-bold text-slate-400">★★★ Thank you for doing business with Acu-invent ★★★</p>
+              <p className="text-xs font-bold text-slate-400">★★★ Thank you for doing business with {mergedSettings.companyName} ★★★</p>
               <p className="text-[10px] text-slate-400 font-mono mt-1">Authorized terminal node signature verified</p>
             </div>
 

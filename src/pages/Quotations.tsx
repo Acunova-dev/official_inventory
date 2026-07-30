@@ -5,6 +5,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { quotationService, customerService, productService, settingsService, aiCopilotService } from "../services/api";
+import { getMergedCompanySettings } from "../constants/defaultSettings";
 import logoImg from "../pic.png";
 import { Quotation, Customer, Product } from "../types";
 import { useToast } from "../components/Layout";
@@ -33,7 +34,6 @@ import { motion, AnimatePresence } from "motion/react";
 import { UnifiedDocumentModal } from "../components/UnifiedDocumentModal";
 import { DocumentOcrModal } from "../components/DocumentOcrModal";
 import { PrintConfirmationModal } from "../components/PrintConfirmationModal";
-import { getMergedCompanySettings } from "../constants/defaultSettings";
 import { normalizeDocument, exportDocumentToPdf } from "../utils/documentPrinter";
 
 // Form validation schema
@@ -138,6 +138,7 @@ export const Quotations: React.FC = () => {
     queryKey: ["company-settings"],
     queryFn: () => settingsService.get(),
   });
+  const mergedSettings = getMergedCompanySettings(serverSettings);
 
   // Mutations
   const createMutation = useMutation({
@@ -582,34 +583,6 @@ export const Quotations: React.FC = () => {
                   </div>
 
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">Tax / VAT (%)</label>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          id="quoteEnableTaxCheckbox"
-                          {...register("enableTax")}
-                          className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 cursor-pointer"
-                        />
-                        <label htmlFor="quoteEnableTaxCheckbox" className="text-[10px] font-bold text-slate-600 cursor-pointer">Charge Tax</label>
-                      </div>
-                    </div>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        max="100"
-                        placeholder="15"
-                        disabled={!formEnableTax}
-                        {...register("taxRate", { valueAsNumber: true })}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs font-mono font-bold disabled:bg-slate-100 disabled:text-slate-400"
-                      />
-                      <span className="absolute right-3 top-2.5 text-xs font-mono text-slate-400 font-bold">%</span>
-                    </div>
-                  </div>
-
-                  <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">Status Code</label>
                     <select
                       {...register("status")}
@@ -662,10 +635,6 @@ export const Quotations: React.FC = () => {
                       <div className="flex justify-between text-slate-400">
                         <span>Discount ({formDiscountRate * 100}%)</span>
                         <span className="text-rose-400">-${calculationPreview.discountAmount.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-slate-400">
-                        <span>VAT ({(effectiveFormTaxRate * 100).toFixed(1)}%)</span>
-                        <span className="text-slate-300">+${calculationPreview.taxAmount.toFixed(2)}</span>
                       </div>
                     </div>
 
@@ -764,12 +733,16 @@ export const Quotations: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 pb-6 border-b border-slate-100">
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
-                    <img src={logoImg} alt="Acu-invent Logo" className="h-8 w-auto object-contain rounded-md" />
-                    <span className="font-extrabold text-xl text-slate-950 tracking-tight">Acu-invent <span className="font-light text-slate-500 text-xs">Inventory Ltd</span></span>
+                    {mergedSettings.logoUrl ? (
+                      <img src={mergedSettings.logoUrl} alt="Company Logo" className="h-8 w-auto object-contain rounded-md" />
+                    ) : (
+                      <img src={logoImg} alt="Logo" className="h-8 w-auto object-contain rounded-md" />
+                    )}
+                    <span className="font-extrabold text-xl text-slate-950 tracking-tight">{mergedSettings.companyName}</span>
                   </div>
                   <p className="text-[11px] text-slate-400 font-medium font-sans">
-                    900 Technology Way, Suite 101, CA<br />
-                    Licence No: ACU-2026-CA | +1-800-555-8800
+                    {mergedSettings.address}<br />
+                    TIN: {mergedSettings.tinNumber} | Ph: {mergedSettings.phone}
                   </p>
                 </div>
 
@@ -792,8 +765,8 @@ export const Quotations: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase block mb-1">Status & Validity</span>
-                  <p className="text-xs font-bold text-slate-700">Account Owner: Acu-invent Systems</p>
-                  <p className="text-xs mt-1">Validity Lock: <span className="font-semibold text-rose-600">30 Days reserved on hardware</span></p>
+                  <p className="text-xs font-bold text-slate-700">Account Owner: {mergedSettings.companyName}</p>
+                  <p className="text-xs mt-1">Validity Lock: <span className="font-semibold text-rose-600">30 Days reserved on items</span></p>
                 </div>
               </div>
 
@@ -847,10 +820,6 @@ export const Quotations: React.FC = () => {
                       <span className="text-rose-500">-${selectedQuote.discountAmount.toFixed(2)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-slate-400">
-                    <span>Applicable VAT (15%)</span>
-                    <span>+${selectedQuote.taxAmount.toFixed(2)}</span>
-                  </div>
                   <div className="h-[1px] bg-slate-100 my-2"></div>
                   <div className="flex justify-between items-center text-sm font-black pt-1">
                     <span className="font-sans text-slate-400 uppercase tracking-wide">GRAND TOTAL DUE ($)</span>

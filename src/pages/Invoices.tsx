@@ -66,7 +66,7 @@ type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
 
 export const Invoices: React.FC = () => {
   const queryClient = useQueryClient();
-  const { showToast } = useToast(); 
+  const { showToast } = useToast();
   const location = useLocation();
 
   // Primary view state
@@ -135,8 +135,8 @@ export const Invoices: React.FC = () => {
       customerId: "",
       dueDate: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
       discountRate: 0,
-      enableTax: true,
-      taxRate: 15,
+      enableTax: false,
+      taxRate: 0,
       notes: "Thank you for your business!",
       termsAndConditions: "Payment is due within 14 days of invoice date.",
       status: "Issued",
@@ -551,7 +551,7 @@ export const Invoices: React.FC = () => {
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-3xs space-y-6">
             <h2 className="font-bold text-slate-900 text-base pb-3 border-b border-slate-100 flex items-center gap-2">
               <Plus size={18} className="text-blue-600" />
-              Create New Tax Invoice
+              Create New Sales Invoice
             </h2>
 
             {/* Customer & Dates Header */}
@@ -674,16 +674,6 @@ export const Invoices: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="enableTax"
-                    {...register("enableTax")}
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <label htmlFor="enableTax" className="text-xs font-bold text-slate-700">Apply Standard VAT / Tax Rate (15%)</label>
-                </div>
-
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Notes & References</label>
                   <textarea
@@ -705,12 +695,6 @@ export const Invoices: React.FC = () => {
                   <div className="flex justify-between text-emerald-600 font-bold">
                     <span>Discount:</span>
                     <span className="font-mono">-${discountAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                {watchedEnableTax && (
-                  <div className="flex justify-between text-slate-600">
-                    <span>VAT (15%):</span>
-                    <span className="font-mono font-bold">${taxAmount.toFixed(2)}</span>
                   </div>
                 )}
                 <div className="pt-3 border-t border-slate-200 flex justify-between text-slate-900 font-black text-sm">
@@ -875,7 +859,7 @@ export const Invoices: React.FC = () => {
               </div>
 
               <p className="text-xs text-slate-500">
-                Select an existing sales quotation to convert into an official tax invoice. All items, customer info, discounts, and terms will be seamlessly copied.
+                Select an existing sales quotation to convert into an official invoice. All items, customer info, discounts, and terms will be seamlessly copied.
               </p>
 
               {/* Quotation Search Bar */}
