@@ -66,7 +66,7 @@ type InvoiceFormValues = z.infer<typeof invoiceFormSchema>;
 
 export const Invoices: React.FC = () => {
   const queryClient = useQueryClient();
-  const { showToast } = useToast();
+  const { showToast } = useToast(); 
   const location = useLocation();
 
   // Primary view state
