@@ -21,7 +21,6 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   signUp: (credentials: { email: string; password: string; name: string; businessName?: string }) => Promise<void>;
   logout: () => Promise<void>;
-  switchAccount?: (email: string) => Promise<void>;
   error: string | null;
 }
 

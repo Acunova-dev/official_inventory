@@ -2,8 +2,7 @@ import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { ROLE_DEFINITIONS, AppRole } from "../types/rbac";
-import { ShieldAlert, ArrowLeft, Lock, CheckCircle2, UserCheck, Shield } from "lucide-react";
-import { PRESET_ACCOUNTS } from "../services/dummyAuthApi";
+import { ShieldAlert, ArrowLeft, Lock, CheckCircle2, Shield, UserCheck, KeyRound } from "lucide-react";
 
 interface AccessDeniedProps {
   requiredPermission?: string;
@@ -14,7 +13,7 @@ export const AccessDenied: React.FC<AccessDeniedProps> = ({
   requiredPermission = "restricted_action",
   moduleName = "Requested Module"
 }) => {
-  const { user, switchAccount } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const currentRole = (user?.role || "Sales Person") as AppRole;
@@ -99,43 +98,29 @@ export const AccessDenied: React.FC<AccessDeniedProps> = ({
           </div>
         </div>
 
-        {/* Quick Testing Switcher */}
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50/60 p-6 rounded-2xl border border-blue-200 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 pb-3 border-b border-blue-200/60">
-            <UserCheck className="text-blue-600" size={20} />
+        {/* Request Permission Notice */}
+        <div className="bg-gradient-to-br from-slate-50 to-blue-50/50 p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-200/60">
+            <KeyRound className="text-blue-600" size={20} />
             <div>
-              <h2 className="font-extrabold text-blue-950 text-base">Test Different Role Profiles</h2>
-              <p className="text-xs text-blue-700">Switch accounts instantly to verify RBAC security isolation</p>
+              <h2 className="font-extrabold text-slate-900 text-base">Request Elevated Access</h2>
+              <p className="text-xs text-slate-500">How to unlock access to {moduleName}</p>
             </div>
           </div>
 
-          <div className="space-y-2.5">
-            {PRESET_ACCOUNTS.filter(a => a.status === "Active").map((account) => (
-              <button
-                key={account.id}
-                onClick={async () => {
-                  await switchAccount(account.email);
-                  navigate("/");
-                }}
-                className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between cursor-pointer ${
-                  user?.email === account.email
-                    ? "bg-blue-600 text-white border-blue-600 shadow-md"
-                    : "bg-white hover:bg-slate-50 text-slate-800 border-slate-200"
-                }`}
-              >
-                <div>
-                  <p className="text-xs font-extrabold">{account.name}</p>
-                  <p className={`text-[11px] ${user?.email === account.email ? "text-blue-100" : "text-slate-400"} font-mono`}>
-                    {account.email} • {account.role}
-                  </p>
-                </div>
-                {user?.email === account.email ? (
-                  <span className="text-xs font-bold bg-white/20 px-2 py-0.5 rounded-full text-white">Active</span>
-                ) : (
-                  <span className="text-xs font-bold text-blue-600 hover:underline">Switch →</span>
-                )}
-              </button>
-            ))}
+          <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
+            <p>
+              System permissions in Acu-invent are strictly managed by your organization's Principal Administrator using Role-Based Access Control (RBAC).
+            </p>
+            <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-1.5 font-mono text-[11px]">
+              <p className="text-slate-400 uppercase font-bold text-[10px]">Permission Key Required:</p>
+              <p className="text-blue-600 font-bold">{requiredPermission}</p>
+              <p className="text-slate-400 uppercase font-bold text-[10px] pt-1">Logged In Account:</p>
+              <p className="text-slate-700">{user?.email || "Authenticated User"}</p>
+            </div>
+            <p className="text-slate-500">
+              If you require access to this section for your daily workflow, please contact an Administrator to update your role or grant a custom permission override.
+            </p>
           </div>
         </div>
 

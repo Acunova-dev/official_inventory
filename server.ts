@@ -355,7 +355,7 @@ const initialDatabase: Database = {
         }
       ],
       subtotal: 5874,
-      taxRate: 0,
+      taxRate: 0.15,
       taxAmount: 881.1,
       discountRate: 0.1,
       discountAmount: 587.4,
@@ -381,11 +381,11 @@ const initialDatabase: Database = {
         }
       ],
       subtotal: 1299,
-      taxRate: 0,
-      taxAmount: 0,
+      taxRate: 0.15,
+      taxAmount: 194.85,
       discountRate: 0.0,
       discountAmount: 0.0,
-      total: 1299,
+      total: 1493.85,
       status: "Accepted",
       notes: "Education procurement code apply."
     }
@@ -414,38 +414,38 @@ const initialDatabase: Database = {
         }
       ],
       subtotal: 557,
-      taxRate: 0,
-      taxAmount: 0,
+      taxRate: 0.15,
+      taxAmount: 83.55,
       discountRate: 0.05,
       discountAmount: 27.85,
-      total: 529.15
+      total: 612.7
     }
   ],
   companySettings: {
-    companyName: "Acunova Pvt Ltd",
-    companySubtitle: "Acunova Pvt Ltd",
-    tagline: "Suppliers of High-Quality Electronics & Components",
+    companyName: "SHIELD HARDWARE",
+    companySubtitle: "SHIELD HARDWARE",
+    tagline: "Suppliers of Plumbing, Electrical & General Hardware",
     logoUrl: "",
-    logoInitials: "AN",
-    streetAddress: "70905 LOBENGULA WEST",
+    logoInitials: "SH",
+    streetAddress: "NO. 57 FORT STREET",
     city: "BULAWAYO",
     country: "ZIMBABWE",
-    address: "70905 Lobengula West, Bulawayo, Zimbabwe",
-    email: "acunovapvtltd@gmail.com",
-    phone: "+263 715 436 611",
+    address: "NO. 57 FORT STREET, BULAWAYO, ZIMBABWE",
+    email: "shieldhardware57@gmail.com",
+    phone: "+263 773 360 800",
     tel: "0",
-    mobile: "+263 715 436 611",
-    mobile2: "+263 774 938 581",
-    vatNumber: "",
-    tinNumber: "2002535002",
-    registrationNumber: "",
-    bankName: "",
-    accountName: "Acunova Pvt Ltd",
+    mobile: "+263 773 360 800",
+    mobile2: "+263 715 503 400",
+    vatNumber: "220412593",
+    tinNumber: "2001804582",
+    registrationNumber: "2001804582",
+    bankName: "Stanbic Bank Bulawayo",
+    accountName: "Shield Hardware Pvt Ltd",
     accountNumber: "9140001827461",
-    ecocashNumber: "+263 774 938 581",
+    ecocashNumber: "*151*2*2*123456# / +263 773 360 800",
     currency: "USD",
     salesType: "ALL",
-    doneBy: "Sales Dept",
+    doneBy: "LMAKONO",
     pdfHeaderColor: "#8b7355",
     footerTerms: "PRICES QUOTED IN USD DOLLAR. Official computer generated document.",
     quotationStyle: "minimalist_authentic"
@@ -785,9 +785,9 @@ function getAuthUser(req: express.Request): { email: string; role: string; name:
 
 // REST APIs - v1 Prefix
 
-// --- AUTH (Server endpoints scrapped in favor of client dummyAuthApi) ---
+// --- AUTH (Production Authentication via Firebase Auth) ---
 app.post("/api/v1/auth/login", (req, res) => {
-  res.status(410).json({ message: "Server auth API scrapped. Login is handled via local dummyAuthApi." });
+  res.status(400).json({ message: "Authentication is managed via Firebase Client SDK." });
 });
 
 app.get("/api/v1/auth/me", (req, res) => {
@@ -1275,7 +1275,7 @@ function calculateCartTotals(
     taxRate = Math.max(0, tr);
   } else if (companySettings) {
     if (companySettings.enableVat) {
-      let tr = Number(companySettings.taxRate ?? 0);
+      let tr = Number(companySettings.taxRate ?? 0.15);
       if (tr > 1) tr = tr / 100;
       taxRate = Math.max(0, tr);
     } else {

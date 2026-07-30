@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import logoImg from "../pic.png";
 import { useAuth } from "../context/AuthContext";
 import { hasPermission, Permission, ROLE_DEFINITIONS, AppRole } from "../types/rbac";
-import { PRESET_ACCOUNTS } from "../services/dummyAuthApi";
 import { 
   LayoutDashboard, 
   Package, 
@@ -58,12 +57,11 @@ export const useToast = () => {
 };
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, logout, switchAccount } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isOcrModalOpen, setIsOcrModalOpen] = useState(false);
-  const [isRoleSwitcherOpen, setIsRoleSwitcherOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const showToast = (message: string, type: "success" | "error" | "info") => {
@@ -159,70 +157,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               <span className="hidden sm:inline">Scan Photo</span>
             </button>
 
-            {/* Role Switcher Selector Badge */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsRoleSwitcherOpen(!isRoleSwitcherOpen)}
-                id="btn-role-switcher"
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-bold transition-all shadow-2xs cursor-pointer ${currentRoleDef?.badgeColor || 'bg-blue-50 text-blue-700 border-blue-200'}`}
-                title="Click to test switching between system roles (Inventory Manager, Sales Person, Admin, etc.)"
-              >
-                <Shield size={13} className="shrink-0" />
-                <span className="hidden md:inline font-mono uppercase tracking-wider">{user?.role || "Role"}</span>
-                <ChevronDown size={13} />
-              </button>
-
-              {/* Role Selector Popup Menu */}
-              <AnimatePresence>
-                {isRoleSwitcherOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-2 w-72 bg-white rounded-2xl border border-slate-200 shadow-2xl z-50 p-3 space-y-2"
-                  >
-                    <div className="px-2 py-1.5 border-b border-slate-100 flex items-center justify-between">
-                      <p className="text-[11px] font-black uppercase text-slate-400 tracking-wider">Switch System Role</p>
-                      <span className="text-[10px] bg-blue-50 text-blue-600 font-bold px-2 py-0.5 rounded-full">RBAC Simulator</span>
-                    </div>
-
-                    <div className="space-y-1 max-h-64 overflow-y-auto">
-                      {PRESET_ACCOUNTS.map((account) => {
-                        const isCurrent = user?.email === account.email;
-                        return (
-                          <button
-                            key={account.id}
-                            onClick={async () => {
-                              try {
-                                await switchAccount(account.email);
-                                setIsRoleSwitcherOpen(false);
-                                showToast(`Switched active context to ${account.name} (${account.role})`, "success");
-                                navigate("/");
-                              } catch (err: any) {
-                                showToast(err.message || "Failed to switch role", "error");
-                              }
-                            }}
-                            className={`w-full text-left p-2.5 rounded-xl text-xs flex items-center justify-between transition-all cursor-pointer ${
-                              isCurrent
-                                ? "bg-slate-900 text-white font-bold shadow-sm"
-                                : "hover:bg-slate-50 text-slate-700"
-                            }`}
-                          >
-                            <div>
-                              <p className="font-extrabold">{account.name.split("(")[0].trim()}</p>
-                              <p className={`text-[10px] ${isCurrent ? "text-slate-300" : "text-slate-400"} font-mono`}>
-                                {account.role} {account.status === "Inactive" ? "• Suspended" : ""}
-                              </p>
-                            </div>
-                            {isCurrent && <UserCheck size={16} className="text-blue-400 shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+            {/* System Role Badge */}
+            <div 
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-bold ${currentRoleDef?.badgeColor || 'bg-blue-50 text-blue-700 border-blue-200'}`}
+              title="Assigned System Role"
+            >
+              <Shield size={13} className="shrink-0" />
+              <span className="hidden md:inline font-mono uppercase tracking-wider">{user?.role || "Role"}</span>
             </div>
 
             <div className="hidden md:block h-8 w-[1px] bg-slate-200 mx-1"></div>
