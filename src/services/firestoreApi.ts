@@ -9,7 +9,8 @@ import {
   query, 
   where, 
   orderBy, 
-  limit 
+  limit,
+  runTransaction 
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, auth, storage, handleFirestoreError, OperationType } from "../lib/firebase";
@@ -30,7 +31,11 @@ import {
   SystemLogsResponse,
   PurchaseOrder,
   GoodsReceivedNote,
-  StockMovementItem
+  StockMovementItem,
+  CashBookEntry,
+  BankAccount,
+  BankLedgerEntry,
+  FinancialSummaryReport
 } from "../types";
 
 import { DEFAULT_COMPANY_SETTINGS, getMergedCompanySettings } from "../constants/defaultSettings";
@@ -777,6 +782,412 @@ export const quotationService = {
 };
 
 // -------------------------------------------------------------
+// FINANCIAL SERVICE (Cash Book, Bank Accounts, Transfers)
+// -------------------------------------------------------------
+export const financialService = {
+  getNextSequenceNumber: async (businessId: string, bookType: string, prefix: string): Promise<string> => {
+    const counterRef = doc(db, "businesses", businessId, "counters", bookType);
+    let nextCount = 1;
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(counterRef);
+      if (snap.exists()) {
+        nextCount = (snap.data().currentCount || 0) + 1;
+      }
+      transaction.set(counterRef, { currentCount: nextCount, updatedAt: new Date().toISOString() }, { merge: true });
+    });
+    const year = new Date().getFullYear();
+    return `${prefix}-${year}-${String(nextCount).padStart(6, "0")}`;
+  },
+
+  getCashBook: async (businessId: string): Promise<CashBookEntry[]> => {
+    const path = `businesses/${businessId}/cashBook`;
+    try {
+      const snap = await getDocs(collection(db, path));
+      const entries = snap.docs.map(d => ({ id: d.id, ...d.data() } as CashBookEntry & { createdAt?: string }));
+      entries.sort((a, b) => {
+        const dA = a.createdAt || a.date;
+        const dB = b.createdAt || b.date;
+        return dA.localeCompare(dB);
+      });
+      let running = 0;
+      return entries.map(e => {
+        const net = (e.debit || 0) - (e.credit || 0);
+        running += net;
+        return {
+          ...e,
+          runningBalance: running
+        };
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, path);
+    }
+  },
+
+  createCashAdjustment: async (businessId: string, payload: { type: "Debit" | "Credit"; amount: number; category?: string; description?: string; date?: string; referenceDoc?: string; customerId?: string; supplierId?: string; paymentMethod?: string }): Promise<CashBookEntry> => {
+    const path = `businesses/${businessId}/cashBook`;
+    const id = `cb-${Date.now()}`;
+    const referenceDoc = payload.referenceDoc || await financialService.getNextSequenceNumber(businessId, "cashBook", "CB");
+    const amount = Number(payload.amount || 0);
+    const debit = payload.type === "Debit" ? amount : 0;
+    const credit = payload.type === "Credit" ? amount : 0;
+    
+    const existing = await financialService.getCashBook(businessId);
+    const lastBalance = existing.length > 0 ? existing[existing.length - 1].runningBalance : 0;
+    const runningBalance = lastBalance + debit - credit;
+
+    const currentUser = auth.currentUser;
+    const userUid = currentUser?.uid || "unknown";
+    const userEmail = currentUser?.email || "";
+    const activeUserName = currentUser?.displayName || (userEmail ? userEmail.split("@")[0] : "Admin");
+    const nowIso = new Date().toISOString();
+
+    const entry: CashBookEntry & { businessId: string; createdByUid?: string; createdByEmail?: string; createdAt?: string } = {
+      id,
+      date: payload.date || new Date().toISOString().split("T")[0],
+      referenceDoc,
+      description: payload.description || "Cash Movement",
+      debit,
+      credit,
+      runningBalance,
+      category: payload.category || (debit > 0 ? "Cash Inflow" : "Cash Outflow"),
+      createdBy: activeUserName,
+      createdByUid: userUid,
+      createdByEmail: userEmail,
+      createdAt: nowIso,
+      businessId
+    };
+
+    try {
+      await setDoc(doc(db, "businesses", businessId, "cashBook", id), entry);
+
+      await systemLogService.logAction(businessId, {
+        category: "Financial Management",
+        action: "CASH_ENTRY_POSTED",
+        userEmail,
+        userName: activeUserName,
+        details: `Posted Cash ${payload.type} of $${amount.toFixed(2)} [Ref: ${referenceDoc}].`,
+        targetId: id,
+        severity: "info"
+      });
+
+      return entry;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, path);
+    }
+  },
+
+  getBankAccounts: async (businessId: string): Promise<BankAccount[]> => {
+    const path = `businesses/${businessId}/bankAccounts`;
+    try {
+      const snap = await getDocs(collection(db, path));
+      const accounts = snap.docs.map(d => ({ id: d.id, ...d.data() } as BankAccount));
+      if (accounts.length === 0) {
+        const defaultBank: BankAccount & { businessId: string; createdAt: string } = {
+          id: `bank-main-${Date.now()}`,
+          accountName: "Main Operations Account",
+          accountNumber: "1098234567",
+          bankName: "First National Bank",
+          branch: "Headquarters",
+          currency: "$",
+          initialBalance: 0,
+          currentBalance: 0,
+          status: "Active",
+          businessId,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(doc(db, "businesses", businessId, "bankAccounts", defaultBank.id), defaultBank);
+        return [defaultBank];
+      }
+      return accounts;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, path);
+    }
+  },
+
+  createBankAccount: async (businessId: string, payload: { accountName: string; accountNumber: string; bankName: string; branch?: string; initialBalance?: number; currency?: string }): Promise<BankAccount> => {
+    const path = `businesses/${businessId}/bankAccounts`;
+    const id = `bank-${Date.now()}`;
+    const initialBalance = Number(payload.initialBalance || 0);
+
+    const currentUser = auth.currentUser;
+    const userEmail = currentUser?.email || "";
+    const activeUserName = currentUser?.displayName || (userEmail ? userEmail.split("@")[0] : "Admin");
+
+    const bankAcc: BankAccount & { businessId: string; createdBy?: string; createdAt: string } = {
+      id,
+      accountName: payload.accountName,
+      accountNumber: payload.accountNumber,
+      bankName: payload.bankName,
+      branch: payload.branch || "Main Branch",
+      currency: payload.currency || "$",
+      initialBalance,
+      currentBalance: initialBalance,
+      status: "Active",
+      businessId,
+      createdBy: activeUserName,
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      await setDoc(doc(db, "businesses", businessId, "bankAccounts", id), bankAcc);
+
+      if (initialBalance > 0) {
+        const entryId = `bank-txn-init-${Date.now()}`;
+        const refDoc = await financialService.getNextSequenceNumber(businessId, "bankTxn", "BNK");
+        await setDoc(doc(db, "businesses", businessId, "bankTransactions", entryId), {
+          id: entryId,
+          bankAccountId: id,
+          bankAccountName: payload.accountName,
+          date: new Date().toISOString().split("T")[0],
+          referenceDoc: refDoc,
+          description: "Initial Account Opening Balance",
+          debit: initialBalance,
+          credit: 0,
+          runningBalance: initialBalance,
+          transactionType: "Deposit",
+          reconciliationStatus: "Reconciled",
+          createdBy: activeUserName,
+          createdAt: new Date().toISOString(),
+          businessId
+        });
+      }
+
+      await systemLogService.logAction(businessId, {
+        category: "Bank Account Management",
+        action: "BANK_ACCOUNT_CREATED",
+        userEmail,
+        userName: activeUserName,
+        details: `Created Bank Account '${payload.accountName}' (${payload.bankName}) with initial balance $${initialBalance.toFixed(2)}.`,
+        targetId: id,
+        severity: "success"
+      });
+
+      return bankAcc;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, path);
+    }
+  },
+
+  getBankLedger: async (businessId: string, accountId: string): Promise<BankLedgerEntry[]> => {
+    const path = `businesses/${businessId}/bankTransactions`;
+    try {
+      const snap = await getDocs(collection(db, path));
+      const entries = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as BankLedgerEntry & { createdAt?: string }))
+        .filter(e => e.bankAccountId === accountId);
+
+      entries.sort((a, b) => {
+        const dA = a.createdAt || a.date;
+        const dB = b.createdAt || b.date;
+        return dA.localeCompare(dB);
+      });
+
+      let running = 0;
+      return entries.map(e => {
+        const net = (e.debit || 0) - (e.credit || 0);
+        running += net;
+        return {
+          ...e,
+          runningBalance: running
+        };
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, path);
+    }
+  },
+
+  recordBankTransaction: async (businessId: string, payload: { bankAccountId: string; type: "Deposit" | "Withdrawal" | "EFT Payment" | "Transfer" | "Bank Charge" | "Interest" | "Reversal"; amount: number; description: string; referenceDoc?: string; date?: string }): Promise<BankLedgerEntry> => {
+    const bankDocRef = doc(db, "businesses", businessId, "bankAccounts", payload.bankAccountId);
+    const bankSnap = await getDoc(bankDocRef);
+    if (!bankSnap.exists()) throw new Error("Target bank account not found.");
+    const account = bankSnap.data() as BankAccount;
+
+    const amount = Number(payload.amount || 0);
+    const isIncrease = payload.type === "Deposit" || payload.type === "Interest";
+    const debit = isIncrease ? amount : 0;
+    const credit = !isIncrease ? amount : 0;
+    const newBalance = account.currentBalance + debit - credit;
+
+    await updateDoc(bankDocRef, { currentBalance: newBalance, updatedAt: new Date().toISOString() });
+
+    const currentUser = auth.currentUser;
+    const userEmail = currentUser?.email || "";
+    const activeUserName = currentUser?.displayName || (userEmail ? userEmail.split("@")[0] : "Admin");
+
+    const entryId = `bank-txn-${Date.now()}`;
+    const refDoc = payload.referenceDoc || await financialService.getNextSequenceNumber(businessId, "bankTxn", "BNK");
+
+    const entry: BankLedgerEntry & { businessId: string; createdAt: string } = {
+      id: entryId,
+      bankAccountId: payload.bankAccountId,
+      bankAccountName: account.accountName,
+      date: payload.date || new Date().toISOString().split("T")[0],
+      referenceDoc: refDoc,
+      description: payload.description,
+      debit,
+      credit,
+      runningBalance: newBalance,
+      transactionType: payload.type,
+      reconciliationStatus: "Reconciled",
+      createdBy: activeUserName,
+      createdAt: new Date().toISOString(),
+      businessId
+    };
+
+    await setDoc(doc(db, "businesses", businessId, "bankTransactions", entryId), entry);
+
+    await systemLogService.logAction(businessId, {
+      category: "Bank Account Management",
+      action: `BANK_${payload.type.toUpperCase()}`,
+      userEmail,
+      userName: activeUserName,
+      details: `Recorded ${payload.type} of $${amount.toFixed(2)} on account ${account.accountName}. New balance: $${newBalance.toFixed(2)}.`,
+      targetId: entryId,
+      severity: "info"
+    });
+
+    return entry;
+  },
+
+  transferFunds: async (businessId: string, payload: { fromType: "Bank" | "Cash"; fromId?: string; toType: "Bank" | "Cash"; toId?: string; amount: number; description?: string }) => {
+    const amount = Number(payload.amount || 0);
+    if (amount <= 0) throw new Error("Transfer amount must be greater than zero.");
+
+    if (payload.fromType === payload.toType && payload.fromId === payload.toId) {
+      throw new Error("Source and destination accounts must be different.");
+    }
+
+    const currentUser = auth.currentUser;
+    const userEmail = currentUser?.email || "";
+    const activeUserName = currentUser?.displayName || (userEmail ? userEmail.split("@")[0] : "Admin");
+    const desc = payload.description || "Internal Funds Transfer";
+
+    let sourceName = "Cash Drawer";
+    if (payload.fromType === "Bank") {
+      if (!payload.fromId) throw new Error("Please select source bank account.");
+      const srcRef = doc(db, "businesses", businessId, "bankAccounts", payload.fromId);
+      const srcSnap = await getDoc(srcRef);
+      if (!srcSnap.exists()) throw new Error("Source bank account not found.");
+      const srcAcc = srcSnap.data() as BankAccount;
+      if (srcAcc.currentBalance < amount) throw new Error(`Insufficient funds in source account '${srcAcc.accountName}'. Current balance: $${srcAcc.currentBalance.toFixed(2)}`);
+
+      sourceName = srcAcc.accountName;
+      const newSrcBal = srcAcc.currentBalance - amount;
+      await updateDoc(srcRef, { currentBalance: newSrcBal, updatedAt: new Date().toISOString() });
+
+      const txnId = `bank-transfer-out-${Date.now()}`;
+      const refDoc = await financialService.getNextSequenceNumber(businessId, "bankTxn", "TRF");
+      await setDoc(doc(db, "businesses", businessId, "bankTransactions", txnId), {
+        id: txnId,
+        bankAccountId: payload.fromId,
+        bankAccountName: srcAcc.accountName,
+        date: new Date().toISOString().split("T")[0],
+        referenceDoc: refDoc,
+        description: `Transfer Out to ${payload.toType === "Bank" ? "Bank" : "Cash Drawer"}: ${desc}`,
+        debit: 0,
+        credit: amount,
+        runningBalance: newSrcBal,
+        transactionType: "Transfer",
+        reconciliationStatus: "Reconciled",
+        createdBy: activeUserName,
+        createdAt: new Date().toISOString(),
+        businessId
+      });
+    } else {
+      await financialService.createCashAdjustment(businessId, {
+        type: "Credit",
+        amount,
+        category: "Internal Transfer",
+        description: `Cash Transfer Out to ${payload.toType === "Bank" ? "Bank Account" : "Other Cash"}: ${desc}`
+      });
+    }
+
+    if (payload.toType === "Bank") {
+      if (!payload.toId) throw new Error("Please select destination bank account.");
+      const destRef = doc(db, "businesses", businessId, "bankAccounts", payload.toId);
+      const destSnap = await getDoc(destRef);
+      if (!destSnap.exists()) throw new Error("Destination bank account not found.");
+      const destAcc = destSnap.data() as BankAccount;
+
+      const newDestBal = destAcc.currentBalance + amount;
+      await updateDoc(destRef, { currentBalance: newDestBal, updatedAt: new Date().toISOString() });
+
+      const txnId = `bank-transfer-in-${Date.now()}`;
+      const refDoc = await financialService.getNextSequenceNumber(businessId, "bankTxn", "TRF");
+      await setDoc(doc(db, "businesses", businessId, "bankTransactions", txnId), {
+        id: txnId,
+        bankAccountId: payload.toId,
+        bankAccountName: destAcc.accountName,
+        date: new Date().toISOString().split("T")[0],
+        referenceDoc: refDoc,
+        description: `Transfer In from ${sourceName}: ${desc}`,
+        debit: amount,
+        credit: 0,
+        runningBalance: newDestBal,
+        transactionType: "Transfer",
+        reconciliationStatus: "Reconciled",
+        createdBy: activeUserName,
+        createdAt: new Date().toISOString(),
+        businessId
+      });
+    } else {
+      await financialService.createCashAdjustment(businessId, {
+        type: "Debit",
+        amount,
+        category: "Internal Transfer",
+        description: `Cash Deposit In from ${sourceName}: ${desc}`
+      });
+    }
+
+    await systemLogService.logAction(businessId, {
+      category: "Financial Management",
+      action: "FUNDS_TRANSFERRED",
+      userEmail,
+      userName: activeUserName,
+      details: `Transferred $${amount.toFixed(2)} from ${sourceName} to ${payload.toType}.`,
+      severity: "success"
+    });
+
+    return { success: true };
+  },
+
+  getSummary: async (businessId: string): Promise<FinancialSummaryReport> => {
+    const cashEntries = await financialService.getCashBook(businessId);
+    const bankAccounts = await financialService.getBankAccounts(businessId);
+    const receipts = await receiptService.getAll(businessId);
+
+    const cashBalance = cashEntries.length > 0 ? cashEntries[cashEntries.length - 1].runningBalance : 0;
+    const totalBankBalance = bankAccounts.reduce((sum, b) => sum + (b.currentBalance || 0), 0);
+    const totalLiquidReserves = cashBalance + totalBankBalance;
+
+    const validReceipts = receipts.filter(r => r.approvalStatus !== "Reversed");
+    const totalReceiptsCollected = validReceipts.reduce((sum, r) => sum + (r.total || 0), 0);
+    const totalReceiptsCount = validReceipts.length;
+
+    const totalCashInflow = cashEntries.reduce((sum, e) => sum + (e.debit || 0), 0);
+    const totalCashOutflow = cashEntries.reduce((sum, e) => sum + (e.credit || 0), 0);
+
+    return {
+      totalReceipts: totalReceiptsCollected,
+      totalPayments: totalCashOutflow,
+      totalCashBalance: cashBalance,
+      totalBankBalance,
+      totalPettyCashBalance: 0,
+      cashBalance,
+      bankBalance: totalBankBalance,
+      pettyCashBalance: 0,
+      totalLiquidReserves,
+      totalReceiptsCollected,
+      totalReceiptsCount,
+      totalDisbursements: totalCashOutflow,
+      totalPaymentVouchersCount: 0,
+      outstandingSupplierPayments: 0,
+      netCashFlow: totalCashInflow - totalCashOutflow
+    };
+  }
+};
+
+// -------------------------------------------------------------
 // RECEIPT SERVICE
 // -------------------------------------------------------------
 export const receiptService = {
@@ -796,7 +1207,7 @@ export const receiptService = {
 
   create: async (businessId: string, payload: { customerId: string; customerName?: string; customerEmail?: string; customerPhone?: string; customerAddress?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; paymentMethod?: string; bankAccountId?: string; referenceNumber?: string; notes?: string }, userName: string = "Cashier"): Promise<Receipt> => {
     const id = `rec-${Date.now()}`;
-    const receiptNumber = `REC-${Date.now().toString().slice(-6)}`;
+    const receiptNumber = await financialService.getNextSequenceNumber(businessId, "receipts", "REC");
     const path = `businesses/${businessId}/receipts/${id}`;
 
     let customerName = payload.customerName || "";
@@ -868,6 +1279,18 @@ export const receiptService = {
     const taxAmount = afterDiscount * taxRate;
     const total = afterDiscount + taxAmount;
 
+    let bankAccountName = "";
+    if (payload.bankAccountId) {
+      try {
+        const bSnap = await getDoc(doc(db, "businesses", businessId, "bankAccounts", payload.bankAccountId));
+        if (bSnap.exists()) {
+          bankAccountName = (bSnap.data() as BankAccount).accountName;
+        }
+      } catch (e) {
+        console.warn("Could not fetch bank account for receipt:", e);
+      }
+    }
+
     const currentUser = auth.currentUser;
     const userUid = currentUser?.uid || "unknown";
     const userEmail = currentUser?.email || "";
@@ -892,6 +1315,7 @@ export const receiptService = {
       total,
       paymentMethod: payload.paymentMethod || "Cash",
       bankAccountId: payload.bankAccountId,
+      bankAccountName: bankAccountName || undefined,
       referenceNumber: payload.referenceNumber || "",
       notes: payload.notes || "",
       createdBy: activeUserName,
@@ -909,6 +1333,36 @@ export const receiptService = {
 
     try {
       await setDoc(doc(db, "businesses", businessId, "receipts", id), { ...receipt, businessId });
+
+      // Post financial transaction to source of truth
+      if (payload.bankAccountId && payload.paymentMethod !== "Cash") {
+        try {
+          await financialService.recordBankTransaction(businessId, {
+            bankAccountId: payload.bankAccountId,
+            type: "Deposit",
+            amount: total,
+            description: `Customer payment for Receipt #${receiptNumber} (${customerName})`,
+            referenceDoc: receiptNumber,
+            date: receipt.date
+          });
+        } catch (fErr) {
+          console.warn("Failed to post bank transaction for receipt:", fErr);
+        }
+      } else {
+        try {
+          await financialService.createCashAdjustment(businessId, {
+            type: "Debit",
+            amount: total,
+            category: "Customer Sale",
+            description: `Sales receipt #${receiptNumber} (${customerName})`,
+            referenceDoc: receiptNumber,
+            date: receipt.date,
+            customerId: payload.customerId
+          });
+        } catch (fErr) {
+          console.warn("Failed to post cash entry for receipt:", fErr);
+        }
+      }
 
       await systemLogService.logAction(businessId, {
         category: "Receipt & Sales",
@@ -973,6 +1427,36 @@ export const receiptService = {
         }
       }
 
+      // Reverse financial entry
+      if (receipt.bankAccountId && receipt.paymentMethod !== "Cash") {
+        try {
+          await financialService.recordBankTransaction(businessId, {
+            bankAccountId: receipt.bankAccountId,
+            type: "Reversal",
+            amount: receipt.total,
+            description: `Reversal of Receipt #${receipt.receiptNumber}: ${reason}`,
+            referenceDoc: `REV-${receipt.receiptNumber}`,
+            date: new Date().toISOString().split("T")[0]
+          });
+        } catch (fErr) {
+          console.warn("Failed to reverse bank transaction for receipt:", fErr);
+        }
+      } else {
+        try {
+          await financialService.createCashAdjustment(businessId, {
+            type: "Credit",
+            amount: receipt.total,
+            category: "Sales Reversal",
+            description: `Reversal of Receipt #${receipt.receiptNumber}: ${reason}`,
+            referenceDoc: `REV-${receipt.receiptNumber}`,
+            date: new Date().toISOString().split("T")[0],
+            customerId: receipt.customerId
+          });
+        } catch (fErr) {
+          console.warn("Failed to reverse cash entry for receipt:", fErr);
+        }
+      }
+
       const currUser = auth.currentUser;
       const userUid = currUser?.uid || "unknown";
       const userEmail = currUser?.email || "";
@@ -995,7 +1479,7 @@ export const receiptService = {
         userEmail,
         userName: activeUserName,
         userRole: "Staff",
-        details: `Reversed Receipt #${receipt.receiptNumber} (Reason: ${reason}). Stock quantities returned.`,
+        details: `Reversed Receipt #${receipt.receiptNumber} (Reason: ${reason}). Stock quantities returned and financial ledger updated.`,
         targetId: id,
         severity: "warning",
       });

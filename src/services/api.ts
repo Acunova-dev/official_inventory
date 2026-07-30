@@ -13,6 +13,7 @@ import {
   settingsService as fsSettingsService,
   userService as fsUserService,
   purchasingService as fsPurchasingService,
+  financialService as fsFinancialService,
 } from "./firestoreApi";
 import { 
   Product, 
@@ -243,15 +244,37 @@ export const receiptService = {
 };
 
 // -------------------------------------------------------------
-// FINANCIAL SERVICE (CashBook, Banks, Petty Cash, Vouchers)
+// FINANCIAL SERVICE (CashBook, Banks, Transfers, Summary)
 // -------------------------------------------------------------
 export const financialService = {
-  getCashBook: async (): Promise<CashBookEntry[]> => [],
-  createCashAdjustment: async (payload: any): Promise<CashBookEntry> => ({ id: `cb-${Date.now()}`, date: new Date().toISOString(), referenceDoc: "ADJ", description: payload.description || "Cash adjustment", debit: payload.amount > 0 ? payload.amount : 0, credit: payload.amount < 0 ? Math.abs(payload.amount) : 0, runningBalance: 1000, category: "Adjustment", createdBy: "Admin" }),
-  getBankAccounts: async (): Promise<BankAccount[]> => [],
-  createBankAccount: async (payload: any): Promise<BankAccount> => ({ id: `bank-${Date.now()}`, bankName: payload.bankName || "Bank", accountName: payload.accountName || "Account", accountNumber: payload.accountNumber || "12345", currency: "$", initialBalance: payload.initialBalance || 0, currentBalance: payload.initialBalance || 0, status: "Active" }),
-  getBankLedger: async (accountId: string): Promise<BankLedgerEntry[]> => [],
-  transferFunds: async (payload: any) => ({ success: true }),
+  getCashBook: async (): Promise<CashBookEntry[]> => {
+    const bId = await getActiveBusinessId();
+    return fsFinancialService.getCashBook(bId);
+  },
+  createCashAdjustment: async (payload: { type: "Debit" | "Credit"; amount: number; category?: string; description?: string; date?: string; referenceDoc?: string; customerId?: string; supplierId?: string; paymentMethod?: string }): Promise<CashBookEntry> => {
+    const bId = await getActiveBusinessId();
+    return fsFinancialService.createCashAdjustment(bId, payload);
+  },
+  getBankAccounts: async (): Promise<BankAccount[]> => {
+    const bId = await getActiveBusinessId();
+    return fsFinancialService.getBankAccounts(bId);
+  },
+  createBankAccount: async (payload: { accountName: string; accountNumber: string; bankName: string; branch?: string; initialBalance?: number; currency?: string }): Promise<BankAccount> => {
+    const bId = await getActiveBusinessId();
+    return fsFinancialService.createBankAccount(bId, payload);
+  },
+  getBankLedger: async (accountId: string): Promise<BankLedgerEntry[]> => {
+    const bId = await getActiveBusinessId();
+    return fsFinancialService.getBankLedger(bId, accountId);
+  },
+  recordBankTransaction: async (payload: { bankAccountId: string; type: "Deposit" | "Withdrawal" | "EFT Payment" | "Transfer" | "Bank Charge" | "Interest" | "Reversal"; amount: number; description: string; referenceDoc?: string; date?: string }): Promise<BankLedgerEntry> => {
+    const bId = await getActiveBusinessId();
+    return fsFinancialService.recordBankTransaction(bId, payload);
+  },
+  transferFunds: async (payload: { fromType: "Bank" | "Cash"; fromId?: string; toType: "Bank" | "Cash"; toId?: string; amount: number; description?: string }) => {
+    const bId = await getActiveBusinessId();
+    return fsFinancialService.transferFunds(bId, payload);
+  },
   getPettyCash: async (): Promise<PettyCashEntry[]> => [],
   createPettyExpense: async (payload: any): Promise<PettyCashEntry> => ({ id: `petty-${Date.now()}`, voucherRef: `PV-${Date.now()}`, date: new Date().toISOString(), category: payload.category || "General", description: payload.description || "", debit: 0, credit: payload.amount || 0, runningBalance: 500, paidTo: payload.paidTo || "", createdBy: "Admin" }),
   replenishPettyCash: async (payload: any): Promise<PettyCashEntry> => ({ id: `petty-${Date.now()}`, voucherRef: `PV-${Date.now()}`, date: new Date().toISOString(), category: "Replenishment", description: "Replenished petty cash", debit: payload.amount || 0, credit: 0, runningBalance: 1000, paidTo: "Custodian", createdBy: "Admin" }),
@@ -260,7 +283,10 @@ export const financialService = {
   reversePaymentVoucher: async (id: string, reason: string): Promise<PaymentVoucher> => ({ id, voucherNumber: id, supplierId: "sup-1", supplierName: "Supplier", date: new Date().toISOString().split("T")[0], paymentDate: new Date().toISOString().split("T")[0], paymentMethod: "Cash", amount: 0, currency: "$", purpose: "Reversal", paidBy: "Admin", status: "Reversed", reversalReason: reason, createdBy: "Admin", createdDate: new Date().toISOString() }),
   getNumberingSequences: async (): Promise<DocumentSequenceConfig[]> => [],
   updateNumberingSequences: async (sequences: DocumentSequenceConfig[]) => ({ success: true }),
-  getSummary: async (): Promise<FinancialSummaryReport> => ({ totalReceipts: 0, totalPayments: 0, totalCashBalance: 0, totalBankBalance: 0, totalPettyCashBalance: 0, cashBalance: 0, bankBalance: 0, pettyCashBalance: 0, totalLiquidReserves: 0, totalReceiptsCollected: 0, totalReceiptsCount: 0, totalDisbursements: 0, totalPaymentVouchersCount: 0, outstandingSupplierPayments: 0, netCashFlow: 0 })
+  getSummary: async (): Promise<FinancialSummaryReport> => {
+    const bId = await getActiveBusinessId();
+    return fsFinancialService.getSummary(bId);
+  }
 };
 
 // -------------------------------------------------------------

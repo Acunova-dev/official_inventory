@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { receiptService, customerService, productService, settingsService } from "../services/api";
+import { receiptService, customerService, productService, settingsService, financialService } from "../services/api";
 import { Receipt, Customer, Product } from "../types";
 import { useToast } from "../components/Layout";
 import { 
@@ -87,6 +87,11 @@ export const Receipts: React.FC = () => {
   const { data: serverSettings } = useQuery({
     queryKey: ["company-settings"],
     queryFn: () => settingsService.get(),
+  });
+
+  const { data: bankAccounts = [] } = useQuery({
+    queryKey: ["bankAccounts"],
+    queryFn: () => financialService.getBankAccounts(),
   });
 
   // Mutations
@@ -410,6 +415,45 @@ export const Receipts: React.FC = () => {
                   {errors.discountRate && <p className="text-xs text-rose-500 mt-1">{errors.discountRate.message}</p>}
                 </div>
               </div>
+
+              {/* Payment Method & Destination Account selection */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4 shadow-3xs">
+                <div className="flex items-center gap-2 text-emerald-900 pb-3 border-b border-slate-100">
+                  <span className="h-6 w-6 rounded-md bg-emerald-50 border border-emerald-100 font-bold font-mono text-xs flex items-center justify-center text-emerald-600">3</span>
+                  <h3 className="font-bold text-slate-950 text-sm uppercase tracking-wider">Payment Method & Settlement Account</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Payment Method</label>
+                    <select
+                      {...register("paymentMethod")}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs font-semibold focus:outline-hidden"
+                    >
+                      <option value="Cash">Physical Cash (Drawer)</option>
+                      <option value="Bank Transfer">Bank Transfer (Wire / EFT)</option>
+                      <option value="Card">Debit / Credit Card</option>
+                      <option value="Cheque">Bank Cheque</option>
+                      <option value="Mobile Money">Mobile Money (EcoCash / Wire)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Deposit Destination Account</label>
+                    <select
+                      {...register("bankAccountId")}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs font-semibold focus:outline-hidden"
+                    >
+                      <option value="">-- Physical Cash Book Drawer --</option>
+                      {bankAccounts.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.accountName} ({b.bankName} - ${b.currentBalance.toFixed(2)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Authorization Calculations Block */}
@@ -523,8 +567,8 @@ export const Receipts: React.FC = () => {
               </div>
               <h2 className="text-2xl font-black text-slate-950 tracking-tight">Acu-invent Systems Corp</h2>
               <p className="text-xs text-slate-400 font-medium leading-relaxed">
-                900 Technology Way, CA, 94301<br />
-                Ph: +1-800-555-8800 | GST ID: CA-8892401-ACU
+                70950 Lobengula West, Bulawayo<br />
+                Ph: +263 71 543 6611 | GST ID: CA-8892401-ACU
               </p>
             </div>
 
