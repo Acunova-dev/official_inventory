@@ -7,6 +7,7 @@ import {
   supplierService as fsSupplierService,
   categoryService as fsCategoryService,
   quotationService as fsQuotationService,
+  invoiceService as fsInvoiceService,
   receiptService as fsReceiptService,
   dashboardService as fsDashboardService,
   systemLogService as fsSystemLogService,
@@ -22,6 +23,8 @@ import {
   Supplier, 
   User, 
   Quotation, 
+  Invoice,
+  InvoiceLine,
   Receipt, 
   DashboardSummary, 
   RecentActivity,
@@ -214,6 +217,63 @@ export const quotationService = {
     const bId = await getActiveBusinessId();
     return fsQuotationService.delete(bId, id);
   },
+  convertToInvoice: async (id: string): Promise<Invoice> => {
+    const bId = await getActiveBusinessId();
+    return fsQuotationService.convertQuotationToInvoice(bId, id);
+  }
+};
+
+// -------------------------------------------------------------
+// INVOICE SERVICE
+// -------------------------------------------------------------
+export const invoiceService = {
+  getAll: async (): Promise<Invoice[]> => {
+    const bId = await getActiveBusinessId();
+    return fsInvoiceService.getAll(bId);
+  },
+  getOne: async (id: string): Promise<Invoice> => {
+    const bId = await getActiveBusinessId();
+    return fsInvoiceService.getOne(bId, id);
+  },
+  create: async (payload: {
+    customerId: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    customerAddress?: string;
+    quotationId?: string;
+    quotationNumber?: string;
+    dueDate?: string;
+    items: Array<{ productId: string; quantity: number }>;
+    discountRate: number;
+    taxRate?: number;
+    notes?: string;
+    termsAndConditions?: string;
+    status?: Invoice["status"];
+  }): Promise<Invoice> => {
+    const bId = await getActiveBusinessId();
+    return fsInvoiceService.create(bId, payload);
+  },
+  update: async (id: string, payload: Partial<Invoice>): Promise<Invoice> => {
+    const bId = await getActiveBusinessId();
+    return fsInvoiceService.update(bId, id, payload);
+  },
+  convertQuotation: async (quotationId: string): Promise<Invoice> => {
+    const bId = await getActiveBusinessId();
+    return fsInvoiceService.convertQuotationToInvoice(bId, quotationId);
+  },
+  generateReceipt: async (payload: {
+    invoiceId: string;
+    amountReceived: number;
+    paymentMethod: string;
+    bankAccountId?: string;
+    paymentDate?: string;
+    referenceNumber?: string;
+    notes?: string;
+  }): Promise<{ receipt: Receipt; invoice: Invoice }> => {
+    const bId = await getActiveBusinessId();
+    return fsInvoiceService.generateReceiptFromInvoice(bId, payload);
+  }
 };
 
 // -------------------------------------------------------------

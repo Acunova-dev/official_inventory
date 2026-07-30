@@ -35,7 +35,9 @@ import {
   CashBookEntry,
   BankAccount,
   BankLedgerEntry,
-  FinancialSummaryReport
+  FinancialSummaryReport,
+  Invoice,
+  InvoiceLine
 } from "../types";
 
 import { DEFAULT_COMPANY_SETTINGS, getMergedCompanySettings } from "../constants/defaultSettings";
@@ -778,6 +780,10 @@ export const quotationService = {
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, path);
     }
+  },
+
+  convertQuotationToInvoice: async (businessId: string, quotationId: string): Promise<Invoice> => {
+    return invoiceService.convertQuotationToInvoice(businessId, quotationId);
   }
 };
 
@@ -1488,6 +1494,350 @@ export const receiptService = {
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
     }
+  }
+};
+
+// -------------------------------------------------------------
+// INVOICE SERVICE
+// -------------------------------------------------------------
+export const invoiceService = {
+  getAll: async (businessId: string): Promise<Invoice[]> => {
+    const path = `businesses/${businessId}/invoices`;
+    try {
+      const snapshot = await getDocs(collection(db, path));
+      const invoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Invoice));
+      invoices.sort((a, b) => (b.createdAt || b.date).localeCompare(a.createdAt || a.date));
+      return invoices;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, path);
+    }
+  },
+
+  getOne: async (businessId: string, id: string): Promise<Invoice> => {
+    const path = `businesses/${businessId}/invoices/${id}`;
+    try {
+      const snap = await getDoc(doc(db, "businesses", businessId, "invoices", id));
+      if (!snap.exists()) throw new Error("Invoice not found");
+      return { id: snap.id, ...snap.data() } as Invoice;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, path);
+    }
+  },
+
+  create: async (businessId: string, payload: {
+    customerId: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    customerAddress?: string;
+    quotationId?: string;
+    quotationNumber?: string;
+    dueDate?: string;
+    items: Array<{ productId: string; quantity: number }>;
+    discountRate: number;
+    taxRate?: number;
+    notes?: string;
+    termsAndConditions?: string;
+    status?: Invoice["status"];
+  }): Promise<Invoice> => {
+    const id = `inv-${Date.now()}`;
+    const invoiceNumber = await financialService.getNextSequenceNumber(businessId, "invoices", "INV");
+    const path = `businesses/${businessId}/invoices/${id}`;
+
+    let customerName = payload.customerName || "";
+    let customerEmail = payload.customerEmail || "";
+    let customerPhone = payload.customerPhone || "";
+    let customerAddress = payload.customerAddress || "";
+
+    if (payload.customerId) {
+      try {
+        const custSnap = await getDoc(doc(db, "businesses", businessId, "customers", payload.customerId));
+        if (custSnap.exists()) {
+          const cust = custSnap.data() as Customer;
+          if (!customerName) customerName = cust.name;
+          if (!customerEmail) customerEmail = cust.email || "";
+          if (!customerPhone) customerPhone = cust.phone || "";
+          if (!customerAddress) customerAddress = cust.address || "";
+        }
+      } catch (err) {
+        console.warn("Could not fetch customer details for invoice creation:", err);
+      }
+    }
+
+    if (!customerName) customerName = "Valued Customer";
+
+    const lines: InvoiceLine[] = [];
+    let subtotal = 0;
+
+    for (const item of payload.items) {
+      try {
+        const prodSnap = await getDoc(doc(db, "businesses", businessId, "products", item.productId));
+        if (prodSnap.exists()) {
+          const prod = prodSnap.data() as Product;
+          const lineTotal = item.quantity * prod.sellingPrice;
+          subtotal += lineTotal;
+          lines.push({
+            productId: item.productId,
+            productName: prod.name,
+            quantity: item.quantity,
+            unitPrice: prod.sellingPrice,
+            totalPrice: lineTotal
+          });
+        }
+      } catch {
+        lines.push({ productId: item.productId, productName: "Item", quantity: item.quantity, unitPrice: 50, totalPrice: item.quantity * 50 });
+        subtotal += item.quantity * 50;
+      }
+    }
+
+    const discountRate = payload.discountRate || 0;
+    const discountAmount = subtotal * discountRate;
+    const afterDiscount = subtotal - discountAmount;
+    const taxRate = payload.taxRate || 0.15;
+    const taxAmount = afterDiscount * taxRate;
+    const total = afterDiscount + taxAmount;
+
+    const currentUser = auth.currentUser;
+    const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "Admin");
+    const userEmail = currentUser?.email || "";
+    const userUid = currentUser?.uid || "unknown";
+    const nowIso = new Date().toISOString();
+
+    const invoice: Invoice = {
+      id,
+      invoiceNumber,
+      quotationId: payload.quotationId,
+      quotationNumber: payload.quotationNumber,
+      customerId: payload.customerId,
+      customerName,
+      customerEmail,
+      customerPhone,
+      customerAddress,
+      date: new Date().toISOString().split("T")[0],
+      dueDate: payload.dueDate || new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
+      lines,
+      subtotal,
+      taxRate,
+      taxAmount,
+      discountRate,
+      discountAmount,
+      total,
+      amountPaid: 0,
+      outstandingBalance: total,
+      status: payload.status || "Issued",
+      notes: payload.notes || "",
+      termsAndConditions: payload.termsAndConditions || "Payment is due within 14 days of invoice date.",
+      currency: "$",
+      paymentIds: [],
+      receiptNumbers: [],
+      createdByUid: userUid,
+      createdByName: userName,
+      createdByEmail: userEmail,
+      createdAt: nowIso,
+      updatedByUid: userUid,
+      updatedByName: userName,
+      updatedByEmail: userEmail,
+      updatedAt: nowIso
+    };
+
+    try {
+      await setDoc(doc(db, "businesses", businessId, "invoices", id), { ...invoice, businessId });
+
+      await systemLogService.logAction(businessId, {
+        category: "Invoice Management",
+        action: "INVOICE_CREATED",
+        userEmail,
+        userName,
+        details: `Created Invoice #${invoiceNumber} for '${customerName}' (Total: $${total.toFixed(2)})`,
+        targetId: id,
+        severity: "info"
+      });
+
+      return invoice;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, path);
+    }
+  },
+
+  update: async (businessId: string, id: string, payload: Partial<Invoice>): Promise<Invoice> => {
+    const path = `businesses/${businessId}/invoices/${id}`;
+    try {
+      const currentUser = auth.currentUser;
+      const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "Admin");
+      const userEmail = currentUser?.email || "";
+      const userUid = currentUser?.uid || "unknown";
+      const nowIso = new Date().toISOString();
+
+      const refDoc = doc(db, "businesses", businessId, "invoices", id);
+      const updateData = {
+        ...payload,
+        updatedByUid: userUid,
+        updatedByName: userName,
+        updatedByEmail: userEmail,
+        updatedAt: nowIso
+      };
+      await updateDoc(refDoc, updateData);
+      const snap = await getDoc(refDoc);
+      const updatedInv = { id: snap.id, ...snap.data() } as Invoice;
+
+      await systemLogService.logAction(businessId, {
+        category: "Invoice Management",
+        action: payload.status ? `INVOICE_STATUS_${payload.status.toUpperCase()}` : "INVOICE_UPDATED",
+        userEmail,
+        userName,
+        details: `Updated Invoice #${updatedInv.invoiceNumber}${payload.status ? ` status to '${payload.status}'` : ""}`,
+        targetId: id,
+        severity: "info"
+      });
+
+      return updatedInv;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  },
+
+  convertQuotationToInvoice: async (businessId: string, quotationId: string): Promise<Invoice> => {
+    const quoteSnap = await getDoc(doc(db, "businesses", businessId, "quotations", quotationId));
+    if (!quoteSnap.exists()) throw new Error("Quotation not found.");
+    const quote = { id: quoteSnap.id, ...quoteSnap.data() } as Quotation;
+
+    if (quote.isConverted || quote.invoiceId) {
+      try {
+        const existingInvSnap = await getDoc(doc(db, "businesses", businessId, "invoices", quote.invoiceId!));
+        if (existingInvSnap.exists()) {
+          return { id: existingInvSnap.id, ...existingInvSnap.data() } as Invoice;
+        }
+      } catch {
+        // Fallthrough if invoice was deleted
+      }
+    }
+
+    const payloadItems = quote.lines.map(l => ({
+      productId: l.productId,
+      quantity: l.quantity
+    }));
+
+    const invoice = await invoiceService.create(businessId, {
+      customerId: quote.customerId,
+      customerName: quote.customerName,
+      customerEmail: quote.customerEmail,
+      customerPhone: quote.customerPhone,
+      customerAddress: quote.customerAddress,
+      quotationId: quote.id,
+      quotationNumber: quote.quotationNumber,
+      items: payloadItems,
+      discountRate: quote.discountRate,
+      taxRate: quote.taxRate,
+      notes: quote.notes || `Generated from Quotation #${quote.quotationNumber}`,
+      status: "Issued"
+    });
+
+    const currentUser = auth.currentUser;
+    const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "Admin");
+    const userEmail = currentUser?.email || "";
+
+    await updateDoc(doc(db, "businesses", businessId, "quotations", quote.id), {
+      status: "Converted",
+      isConverted: true,
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      updatedAt: new Date().toISOString()
+    });
+
+    await systemLogService.logAction(businessId, {
+      category: "Quotation Management",
+      action: "QUOTATION_CONVERTED_TO_INVOICE",
+      userEmail,
+      userName,
+      details: `Converted Quotation #${quote.quotationNumber} to Invoice #${invoice.invoiceNumber}`,
+      targetId: quote.id,
+      severity: "success"
+    });
+
+    return invoice;
+  },
+
+  generateReceiptFromInvoice: async (businessId: string, payload: {
+    invoiceId: string;
+    amountReceived: number;
+    paymentMethod: string;
+    bankAccountId?: string;
+    paymentDate?: string;
+    referenceNumber?: string;
+    notes?: string;
+  }): Promise<{ receipt: Receipt; invoice: Invoice }> => {
+    const invSnap = await getDoc(doc(db, "businesses", businessId, "invoices", payload.invoiceId));
+    if (!invSnap.exists()) throw new Error("Invoice not found.");
+    const inv = { id: invSnap.id, ...invSnap.data() } as Invoice;
+
+    if (inv.status === "Paid" || inv.outstandingBalance <= 0) {
+      throw new Error("This invoice is already fully paid.");
+    }
+
+    const payAmount = Number(payload.amountReceived);
+    if (isNaN(payAmount) || payAmount <= 0) {
+      throw new Error("Payment amount must be greater than zero.");
+    }
+
+    const receiptItems = inv.lines.map(line => ({
+      productId: line.productId,
+      quantity: line.quantity
+    }));
+
+    const currentUser = auth.currentUser;
+    const activeUserName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "Cashier");
+
+    const receipt = await receiptService.create(businessId, {
+      customerId: inv.customerId,
+      customerName: inv.customerName,
+      customerEmail: inv.customerEmail,
+      customerPhone: inv.customerPhone,
+      customerAddress: inv.customerAddress,
+      items: receiptItems,
+      discountRate: inv.discountRate || 0,
+      taxRate: inv.taxRate || 0,
+      paymentMethod: payload.paymentMethod || "Cash",
+      bankAccountId: payload.bankAccountId,
+      referenceNumber: payload.referenceNumber || `INV-${inv.invoiceNumber}`,
+      notes: payload.notes || `Payment for Invoice #${inv.invoiceNumber}`
+    }, activeUserName);
+
+    await updateDoc(doc(db, "businesses", businessId, "receipts", receipt.id), {
+      relatedInvoiceIds: [inv.id]
+    });
+
+    const newAmountPaid = (inv.amountPaid || 0) + payAmount;
+    const newOutstanding = Math.max(0, (inv.total || 0) - newAmountPaid);
+    const newStatus: Invoice["status"] = newOutstanding <= 0.001 ? "Paid" : "Partially Paid";
+
+    const updatedPaymentIds = Array.from(new Set([...(inv.paymentIds || []), receipt.id]));
+    const updatedReceiptNumbers = Array.from(new Set([...(inv.receiptNumbers || []), receipt.receiptNumber]));
+
+    const invRef = doc(db, "businesses", businessId, "invoices", inv.id);
+    await updateDoc(invRef, {
+      amountPaid: newAmountPaid,
+      outstandingBalance: newOutstanding,
+      status: newStatus,
+      paymentIds: updatedPaymentIds,
+      receiptNumbers: updatedReceiptNumbers,
+      updatedAt: new Date().toISOString()
+    });
+
+    const updatedInvSnap = await getDoc(invRef);
+    const updatedInvoice = { id: updatedInvSnap.id, ...updatedInvSnap.data() } as Invoice;
+
+    const userEmail = currentUser?.email || "";
+    await systemLogService.logAction(businessId, {
+      category: "Invoice Management",
+      action: newStatus === "Paid" ? "INVOICE_FULLY_PAID" : "INVOICE_PARTIALLY_PAID",
+      userEmail,
+      userName: activeUserName,
+      details: `Recorded payment of $${payAmount.toFixed(2)} on Invoice #${inv.invoiceNumber} via Receipt #${receipt.receiptNumber}. Remaining balance: $${newOutstanding.toFixed(2)}.`,
+      targetId: inv.id,
+      severity: "success"
+    });
+
+    return { receipt, invoice: updatedInvoice };
   }
 };
 

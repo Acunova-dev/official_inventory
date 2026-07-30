@@ -416,8 +416,56 @@ export interface Quotation {
   discountRate: number;
   discountAmount: number;
   total: number;
-  status: "Draft" | "Sent" | "Accepted" | "Rejected" | "Expired";
+  status: "Draft" | "Sent" | "Accepted" | "Rejected" | "Expired" | "Converted";
+  invoiceId?: string;
+  invoiceNumber?: string;
+  isConverted?: boolean;
   notes?: string;
+  createdByUid?: string;
+  createdByName?: string;
+  createdByEmail?: string;
+  createdAt?: string;
+  updatedByUid?: string;
+  updatedByName?: string;
+  updatedByEmail?: string;
+  updatedAt?: string;
+}
+
+export interface InvoiceLine {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string; // INV-2026-000001
+  quotationId?: string;
+  quotationNumber?: string;
+  customerId: string;
+  customerName: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  date: string;
+  dueDate: string;
+  lines: InvoiceLine[];
+  subtotal: number;
+  taxRate: number;
+  taxAmount: number;
+  discountRate: number;
+  discountAmount: number;
+  total: number;
+  amountPaid: number;
+  outstandingBalance: number;
+  status: "Draft" | "Issued" | "Partially Paid" | "Paid" | "Overdue" | "Cancelled" | "Void";
+  notes?: string;
+  termsAndConditions?: string;
+  currency?: string;
+  paymentIds?: string[];
+  receiptNumbers?: string[];
   createdByUid?: string;
   createdByName?: string;
   createdByEmail?: string;

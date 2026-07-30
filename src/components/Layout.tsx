@@ -11,6 +11,7 @@ import {
   Truck, 
   FileText, 
   Receipt, 
+  FileCheck,
   Activity, 
   BarChart3,
   UserCog, 
@@ -89,6 +90,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { name: "Customers", path: "/customers", icon: Users, permission: "sales.view" },
     { name: "Suppliers", path: "/suppliers", icon: Truck, permission: "purchasing.view" },
     { name: "Quotations", path: "/quotations", icon: FileText, permission: "sales.view" },
+    { name: "Invoices", path: "/invoices", icon: FileCheck, permission: "sales.view" },
     { name: "Receipts", path: "/receipts", icon: Receipt, permission: "receipts.view" },
     
     // Financial Books Section

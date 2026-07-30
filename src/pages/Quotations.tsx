@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -57,6 +57,20 @@ type QuotationFormValues = z.infer<typeof quotationFormSchema>;
 export const Quotations: React.FC = () => {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const navigate = useNavigate();
+
+  const convertToInvoiceMutation = useMutation({
+    mutationFn: (id: string) => quotationService.convertToInvoice(id),
+    onSuccess: (inv) => {
+      queryClient.invalidateQueries({ queryKey: ["quotations"] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      showToast(`Quotation successfully converted to Invoice #${inv.invoiceNumber}!`, "success");
+      navigate("/invoices", { state: { selectedInvoiceId: inv.id } });
+    },
+    onError: (err: any) => {
+      showToast(err.message || "Failed to convert quotation to invoice.", "error");
+    }
+  });
 
   const [view, setView] = useState<"list" | "create" | "view">("list");
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
@@ -421,6 +435,15 @@ export const Quotations: React.FC = () => {
                               <Printer size={13} />
                               <span>PDF & Print</span>
                             </button>
+                            <button
+                              onClick={() => convertToInvoiceMutation.mutate(q.id)}
+                              disabled={convertToInvoiceMutation.isPending}
+                              className="p-1.5 rounded-lg text-emerald-700 bg-emerald-50 hover:bg-emerald-600 hover:text-white transition-all font-bold text-xs inline-flex items-center gap-1.5 border border-emerald-200 shadow-3xs cursor-pointer disabled:opacity-50"
+                              title="Convert to Official Sales Invoice"
+                            >
+                              <FileCheck2 size={13} />
+                              <span>{q.isConverted ? "View Invoice" : "To Invoice"}</span>
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -741,12 +764,12 @@ export const Quotations: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 pb-6 border-b border-slate-100">
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
-                    <img src={logoImg} alt="Acunova Logo" className="h-8 w-auto object-contain rounded-md" />
-                    <span className="font-extrabold text-xl text-slate-950 tracking-tight">Acunova Pvt Ltd <span className="font-light text-slate-500 text-xs"></span></span>
+                    <img src={logoImg} alt="Acu-invent Logo" className="h-8 w-auto object-contain rounded-md" />
+                    <span className="font-extrabold text-xl text-slate-950 tracking-tight">Acu-invent <span className="font-light text-slate-500 text-xs">Inventory Ltd</span></span>
                   </div>
                   <p className="text-[11px] text-slate-400 font-medium font-sans">
-                    70905 Lobengula West, Bulawayo, Zimbabwe<br />
-                    +263-715-436-611
+                    900 Technology Way, Suite 101, CA<br />
+                    Licence No: ACU-2026-CA | +1-800-555-8800
                   </p>
                 </div>
 
@@ -769,7 +792,7 @@ export const Quotations: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase block mb-1">Status & Validity</span>
-                  <p className="text-xs font-bold text-slate-700">Account Owner: Acunova Pvt Ltd</p>
+                  <p className="text-xs font-bold text-slate-700">Account Owner: Acu-invent Systems</p>
                   <p className="text-xs mt-1">Validity Lock: <span className="font-semibold text-rose-600">30 Days reserved on hardware</span></p>
                 </div>
               </div>

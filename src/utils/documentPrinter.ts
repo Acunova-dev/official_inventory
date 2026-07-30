@@ -6,6 +6,7 @@ import {
   PaymentVoucher, 
   GoodsReceivedNote, 
   Quotation, 
+  Invoice,
   CompanySettings 
 } from "../types";
 import { DEFAULT_COMPANY_SETTINGS, getMergedCompanySettings } from "../constants/defaultSettings";
@@ -15,7 +16,8 @@ export type SupportedDocumentType =
   | "receipt" 
   | "payment_voucher" 
   | "grn" 
-  | "quotation";
+  | "quotation"
+  | "invoice";
 
 export interface NormalizedDocumentLine {
   id: string;
@@ -272,6 +274,53 @@ export function normalizeDocument(
         totalAmount: q.total,
         preparedBy: "Sales Department",
         notes: q.notes
+      };
+    }
+
+    case "invoice": {
+      const inv = docData as Invoice;
+      const metaFields = [
+        { label: "Invoice #", value: inv.invoiceNumber },
+        { label: "Date Issued", value: inv.date },
+        { label: "Payment Due Date", value: inv.dueDate || "Upon Receipt" },
+      ];
+      if (inv.quotationNumber) {
+        metaFields.push({ label: "Source Quotation #", value: inv.quotationNumber });
+      }
+      if (inv.amountPaid !== undefined) {
+        metaFields.push({ label: "Amount Paid", value: `${currency} ${inv.amountPaid.toFixed(2)}` });
+      }
+      if (inv.outstandingBalance !== undefined) {
+        metaFields.push({ label: "Balance Due", value: `${currency} ${inv.outstandingBalance.toFixed(2)}` });
+      }
+
+      return {
+        docType: "invoice",
+        title: "TAX INVOICE",
+        documentNumber: inv.invoiceNumber,
+        date: inv.date,
+        status: inv.status || "Issued",
+        partyLabel: "BILLED TO (CUSTOMER)",
+        partyName: inv.customerName,
+        partyEmail: inv.customerEmail,
+        partyPhone: inv.customerPhone,
+        partyAddress: inv.customerAddress,
+        metaFields,
+        lines: (inv.lines || []).map((line, idx) => ({
+          id: line.productId || `inv-line-${idx}`,
+          codeOrSku: `ITEM-${1000 + idx}`,
+          description: line.productName,
+          quantity: line.quantity,
+          unitCostOrPrice: line.unitPrice,
+          total: line.totalPrice
+        })),
+        currency,
+        subtotal: inv.subtotal,
+        discountAmount: inv.discountAmount || 0,
+        taxAmount: inv.taxAmount || 0,
+        totalAmount: inv.total,
+        preparedBy: inv.createdByName || "Accounts Department",
+        notes: [inv.notes, inv.termsAndConditions].filter(Boolean).join("\n\nTerms & Conditions: ")
       };
     }
 

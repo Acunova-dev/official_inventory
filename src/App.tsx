@@ -9,6 +9,7 @@ import { Products } from "./pages/Products";
 import { Customers } from "./pages/Customers";
 import { Suppliers } from "./pages/Suppliers";
 import { Quotations } from "./pages/Quotations";
+import { Invoices } from "./pages/Invoices";
 import { Receipts } from "./pages/Receipts";
 import { Inventory } from "./pages/Inventory";
 import { InventoryInsights } from "./pages/InventoryInsights";
@@ -148,6 +149,14 @@ export default function App() {
               element={
                 <ProtectedRoute requiredPermission="sales.view" moduleName="Quotations & Proposals">
                   <Quotations />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/invoices" 
+              element={
+                <ProtectedRoute requiredPermission="sales.view" moduleName="Sales & Tax Invoices">
+                  <Invoices />
                 </ProtectedRoute>
               } 
             />
