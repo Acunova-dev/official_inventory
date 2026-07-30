@@ -170,14 +170,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (credentials: { email: string; password?: string }) => {
     setIsLoading(true);
     setError(null);
+    const pass = credentials.password || "Password123!";
     try {
-      if (credentials.password) {
-        await signInWithEmailAndPassword(auth, credentials.email, credentials.password);
-      } else {
-        // Fallback email attempt with default pass or prompt
-        await signInWithEmailAndPassword(auth, credentials.email, "Password123!");
-      }
+      await signInWithEmailAndPassword(auth, credentials.email, pass);
     } catch (err: any) {
+      // Check if user account was pre-provisioned in Firestore by an Administrator
+      if (credentials.email) {
+        try {
+          const q = query(collection(db, "users"), where("email", "==", credentials.email));
+          const qSnap = await getDocs(q);
+          if (!qSnap.empty) {
+            const provDoc = qSnap.docs[0].data() as AuthUser & { password?: string };
+            if (provDoc.disabled) {
+              const msg = "Account Disabled: Access suspended by Administrator.";
+              setError(msg);
+              setIsLoading(false);
+              throw new Error(msg);
+            }
+
+            // Verify password if provisioned
+            if (provDoc.password && provDoc.password !== pass) {
+              const msg = "Invalid email or password.";
+              setError(msg);
+              setIsLoading(false);
+              throw new Error(msg);
+            }
+
+            // Provision Firebase Auth identity for the pre-provisioned account
+            await createUserWithEmailAndPassword(auth, credentials.email, pass);
+            return;
+          }
+        } catch (provErr: any) {
+          if (provErr.message?.includes("Account Disabled") || provErr.message?.includes("Invalid email")) {
+            throw provErr;
+          }
+          console.warn("Pre-provisioned login attempt fallback note:", provErr);
+        }
+      }
+
       const msg = err.message || "Login failed. Check your email and password.";
       setError(msg);
       setIsLoading(false);
@@ -189,40 +219,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     setError(null);
     try {
+      let isPreProvisioned = false;
+      try {
+        const q = query(collection(db, "users"), where("email", "==", credentials.email));
+        const qSnap = await getDocs(q);
+        if (!qSnap.empty) {
+          isPreProvisioned = true;
+        }
+      } catch (e) {
+        console.warn("Pre-provision check during signup error:", e);
+      }
+
       const res = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
       const firebaseUser = res.user;
 
-      const businessId = `biz-${firebaseUser.uid}`;
-      const bName = credentials.businessName || `${credentials.name}'s Business`;
+      if (!isPreProvisioned) {
+        const businessId = `biz-${firebaseUser.uid}`;
+        const bName = credentials.businessName || `${credentials.name}'s Business`;
 
-      // Provision Business
-      await setDoc(doc(db, "businesses", businessId), {
-        id: businessId,
-        name: bName,
-        ownerId: firebaseUser.uid,
-        currency: "$",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
+        // Provision Business
+        await setDoc(doc(db, "businesses", businessId), {
+          id: businessId,
+          name: bName,
+          ownerId: firebaseUser.uid,
+          currency: "$",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
 
-      // Provision User Profile
-      const newUser: AuthUser = {
-        id: firebaseUser.uid,
-        name: credentials.name,
-        email: credentials.email,
-        role: "Principal Admin",
-        businessId,
-        status: "Active",
-        disabled: false,
-        lastLogin: new Date().toISOString(),
-        createdDate: new Date().toISOString(),
-        customPermissions: ROLE_DEFINITIONS["Principal Admin"]?.permissions
-      };
+        // Provision Company Settings
+        await setDoc(doc(db, "businesses", businessId, "settings", "company"), {
+          businessId,
+          companyName: bName,
+          companySubtitle: "Inventory & Billing",
+          tagline: "Precision Stock Audit",
+          currency: "$",
+          email: credentials.email
+        });
 
-      await setDoc(doc(db, "users", firebaseUser.uid), newUser);
-      setUser(newUser);
-      const idToken = await firebaseUser.getIdToken();
-      setToken(idToken);
+        // Provision User Profile
+        const newUser: AuthUser = {
+          id: firebaseUser.uid,
+          name: credentials.name,
+          email: credentials.email,
+          role: "Principal Admin",
+          businessId,
+          status: "Active",
+          disabled: false,
+          lastLogin: new Date().toISOString(),
+          createdDate: new Date().toISOString(),
+          customPermissions: ROLE_DEFINITIONS["Principal Admin"]?.permissions
+        };
+
+        await setDoc(doc(db, "users", firebaseUser.uid), newUser);
+        setUser(newUser);
+        const idToken = await firebaseUser.getIdToken();
+        setToken(idToken);
+      }
     } catch (err: any) {
       const msg = err.message || "Registration failed.";
       setError(msg);
