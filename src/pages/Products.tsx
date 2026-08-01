@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { productService } from "../services/api";
+import { productService, categoryService } from "../services/api";
 import { Product } from "../types";
 import { useToast } from "../components/Layout";
 import { 
@@ -24,12 +24,14 @@ import {
   Barcode,
   Camera,
   Wand2,
-  ScanLine
+  ScanLine,
+  FolderCog
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { BarcodeScannerModal } from "../components/BarcodeScannerModal";
 import { SkuGeneratorModal } from "../components/SkuGeneratorModal";
 import { DocumentOcrModal } from "../components/DocumentOcrModal";
+import { CategoryManagementModal } from "../components/CategoryManagementModal";
 
 const productSchema = z.object({
   name: z.string().min(3, { message: "Product Name must be at least 3 characters." }),
@@ -52,6 +54,8 @@ export const Products: React.FC = () => {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [sortBy, setSortBy] = useState("name");
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
@@ -71,6 +75,11 @@ export const Products: React.FC = () => {
   const { data, isLoading } = useQuery({
     queryKey: ["products", search, statusFilter, sortBy, order],
     queryFn: () => productService.getAll({ search, status: statusFilter, sortBy, order }),
+  });
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ["categories"],
+    queryFn: categoryService.getAll,
   });
 
   const productsList = data?.products || [];
@@ -164,9 +173,11 @@ export const Products: React.FC = () => {
 
   const handleOpenAddForm = () => {
     setEditingProduct(null);
+    const activeCats = categories.filter(c => c.status === "Active");
+    const defaultCat = activeCats.length > 0 ? activeCats[0].name : "Laptops";
     reset({
       name: "",
-      category: "Laptops",
+      category: defaultCat,
       costPrice: 0,
       sellingPrice: 0,
       quantity: 5,
@@ -181,9 +192,11 @@ export const Products: React.FC = () => {
 
   const handleOpenAddWithBarcode = (code: string) => {
     setEditingProduct(null);
+    const activeCats = categories.filter(c => c.status === "Active");
+    const defaultCat = activeCats.length > 0 ? activeCats[0].name : "Peripherals";
     reset({
       name: "",
-      category: "Peripherals",
+      category: defaultCat,
       costPrice: 0,
       sellingPrice: 0,
       quantity: 5,
@@ -221,10 +234,19 @@ export const Products: React.FC = () => {
   };
 
   const handleFormSubmit = (values: ProductFormValues) => {
+    const matchedCat = categories.find(
+      c => c.name.toLowerCase() === values.category.toLowerCase() || c.id === values.category
+    );
+    const payload = {
+      ...values,
+      category: matchedCat ? matchedCat.name : values.category,
+      categoryId: matchedCat ? matchedCat.id : undefined,
+    };
+
     if (editingProduct) {
-      updateMutation.mutate({ id: editingProduct.id, payload: values });
+      updateMutation.mutate({ id: editingProduct.id, payload });
     } else {
-      createMutation.mutate(values);
+      createMutation.mutate(payload as any);
     }
   };
 
@@ -238,10 +260,22 @@ export const Products: React.FC = () => {
     setPage(1);
   };
 
-  const totalItems = productsList.length;
+  // Filter products by Category Filter
+  const filteredProductsList = productsList.filter((p) => {
+    if (categoryFilter !== "All") {
+      const catName = p.category || "";
+      const catId = p.categoryId || "";
+      if (catName.toLowerCase() !== categoryFilter.toLowerCase() && catId !== categoryFilter) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const totalItems = filteredProductsList.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
   const startIndex = (page - 1) * itemsPerPage;
-  const paginatedProducts = productsList.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedProducts = filteredProductsList.slice(startIndex, startIndex + itemsPerPage);
 
   // Multi-select helpers
   const allPaginatedSelected = paginatedProducts.length > 0 && paginatedProducts.every((p) => selectedProductIds.includes(p.id));
@@ -362,6 +396,35 @@ export const Products: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap gap-3 items-center w-full md:w-auto">
+          {/* Category Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider hidden sm:inline">Category:</span>
+            <select
+              value={categoryFilter}
+              onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
+              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/25"
+            >
+              <option value="All">All Categories ({categories.length})</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.name}>
+                  {c.name} {c.status === "Inactive" ? "(Inactive)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Manage Categories Button */}
+          <button
+            type="button"
+            onClick={() => setIsCategoryModalOpen(true)}
+            id="btn-manage-categories"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+            title="Manage Product Categories"
+          >
+            <FolderCog size={14} className="text-blue-400" />
+            <span>Manage Categories</span>
+          </button>
+
           <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 p-1 rounded-xl">
             {["All", "In Stock", "Low Stock", "Out Of Stock"].map((status) => (
               <button
@@ -638,18 +701,32 @@ export const Products: React.FC = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Category</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">Category</label>
+                      <button
+                        type="button"
+                        onClick={() => setIsCategoryModalOpen(true)}
+                        className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold hover:underline flex items-center gap-0.5"
+                      >
+                        <FolderCog size={12} />
+                        <span>Manage</span>
+                      </button>
+                    </div>
                     <select
                       {...register("category")}
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-semibold focus:outline-hidden"
                     >
-                      <option value="Laptops">Laptops</option>
-                      <option value="Audio">Audio</option>
-                      <option value="Displays">Displays</option>
-                      <option value="Development Boards">Development Boards</option>
-                      <option value="Power Accessories">Power Accessories</option>
-                      <option value="Peripherals">Peripherals</option>
-                      <option value="Storage">Storage</option>
+                      {categories
+                        .filter(c => c.status === "Active" || c.name === watch("category"))
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name} {c.status === "Inactive" ? "(Inactive)" : ""}
+                          </option>
+                        ))}
+                      {categories.length === 0 && (
+                        <option value="General">General</option>
+                      )}
                     </select>
                   </div>
 
@@ -1061,6 +1138,13 @@ export const Products: React.FC = () => {
       <DocumentOcrModal
         isOpen={isDocumentOcrOpen}
         onClose={() => setIsDocumentOcrOpen(false)}
+      />
+
+      {/* Integrated Product Category Management Modal */}
+      <CategoryManagementModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        products={productsList}
       />
 
     </div>

@@ -55,10 +55,21 @@ export interface User {
   customPermissions?: import("./types/rbac").Permission[];
 }
 
+export interface ProductCategory {
+  id: string;
+  name: string;
+  description?: string;
+  status: "Active" | "Inactive";
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
   category: string;
+  categoryId?: string;
   costPrice: number;
   sellingPrice: number;
   quantity: number;

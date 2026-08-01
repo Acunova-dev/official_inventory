@@ -16,6 +16,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, auth, storage, handleFirestoreError, OperationType } from "../lib/firebase";
 import { 
   Product, 
+  ProductCategory,
   ProductResponse, 
   Customer, 
   Supplier, 
@@ -340,40 +341,270 @@ export const productService = {
 // -------------------------------------------------------------
 // CATEGORY SERVICE
 // -------------------------------------------------------------
-export interface CategoryItem {
-  id: string;
-  name: string;
-  description?: string;
-  createdAt?: string;
-}
+export type CategoryItem = ProductCategory;
+
+const DEFAULT_CATEGORIES = [
+  { name: "Laptops", description: "Portable laptops & notebooks" },
+  { name: "Audio", description: "Headphones, speakers & microphones" },
+  { name: "Displays", description: "Monitors & video displays" },
+  { name: "Development Boards", description: "Microcontrollers & dev kits" },
+  { name: "Power Accessories", description: "Chargers, cables & adapters" },
+  { name: "Peripherals", description: "Keyboards, mice & accessories" },
+  { name: "Storage", description: "SSDs, HDDs & flash drives" },
+];
 
 export const categoryService = {
-  getAll: async (businessId: string): Promise<CategoryItem[]> => {
-    const path = `businesses/${businessId}/categories`;
+  getAll: async (businessId: string): Promise<ProductCategory[]> => {
+    const path = `businesses/${businessId}/productCategories`;
     try {
       const snapshot = await getDocs(collection(db, path));
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CategoryItem));
+      let list: ProductCategory[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ProductCategory));
+
+      // If productCategories is empty, seed defaults
+      if (list.length === 0) {
+        const legacyPath = `businesses/${businessId}/categories`;
+        const legacySnap = await getDocs(collection(db, legacyPath));
+        if (legacySnap.docs.length > 0) {
+          list = legacySnap.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              name: data.name,
+              description: data.description || "",
+              status: (data.status as any) || "Active",
+              createdAt: data.createdAt || new Date().toISOString(),
+              updatedAt: data.updatedAt || new Date().toISOString(),
+              createdBy: "System",
+            } as ProductCategory;
+          });
+        } else {
+          // Seed standard default categories
+          const now = new Date().toISOString();
+          for (const def of DEFAULT_CATEGORIES) {
+            const id = `cat-${def.name.toLowerCase().replace(/[^\w]+/g, "-")}`;
+            const item: ProductCategory = {
+              id,
+              name: def.name,
+              description: def.description,
+              status: "Active",
+              createdAt: now,
+              updatedAt: now,
+              createdBy: "System",
+            };
+            await setDoc(doc(db, "businesses", businessId, "productCategories", id), {
+              ...item,
+              businessId,
+            });
+            list.push(item);
+          }
+        }
+      }
+
+      // Sort alphabetically by name
+      return list.sort((a, b) => a.name.localeCompare(b.name));
     } catch (err) {
       handleFirestoreError(err, OperationType.LIST, path);
     }
   },
-  create: async (businessId: string, data: { name: string; description?: string }): Promise<CategoryItem> => {
-    const id = `cat-${Date.now()}`;
-    const path = `businesses/${businessId}/categories/${id}`;
-    const item: CategoryItem = { id, name: data.name, description: data.description, createdAt: new Date().toISOString() };
+
+  create: async (
+    businessId: string, 
+    data: { name: string; description?: string; status?: "Active" | "Inactive" }, 
+    userName: string = "Admin"
+  ): Promise<ProductCategory> => {
+    const trimmedName = data.name.trim();
+    if (!trimmedName) throw new Error("Category Name cannot be blank.");
+
+    const existing = await categoryService.getAll(businessId);
+    if (existing.some(c => c.name.toLowerCase() === trimmedName.toLowerCase())) {
+      throw new Error(`A category named '${trimmedName}' already exists.`);
+    }
+
+    const id = `cat-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const path = `businesses/${businessId}/productCategories/${id}`;
+    const now = new Date().toISOString();
+    
+    const item: ProductCategory = {
+      id,
+      name: trimmedName,
+      description: data.description?.trim() || "",
+      status: data.status || "Active",
+      createdAt: now,
+      updatedAt: now,
+      createdBy: userName,
+    };
+
     try {
-      await setDoc(doc(db, "businesses", businessId, "categories", id), { ...item, businessId });
+      await setDoc(doc(db, "businesses", businessId, "productCategories", id), {
+        ...item,
+        businessId,
+      });
+
+      await systemLogService.logAction(businessId, {
+        category: "Product Catalog",
+        action: "Category Created",
+        userEmail: userName,
+        userName,
+        userRole: "Staff",
+        details: `Category Created: '${trimmedName}' (${item.status})`,
+        targetId: id,
+        severity: "info",
+      });
+
       return item;
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
     }
   },
-  delete: async (businessId: string, id: string): Promise<void> => {
-    const path = `businesses/${businessId}/categories/${id}`;
+
+  update: async (
+    businessId: string,
+    id: string,
+    data: { name: string; description?: string; status?: "Active" | "Inactive" },
+    userName: string = "Admin"
+  ): Promise<ProductCategory> => {
+    const trimmedName = data.name.trim();
+    if (!trimmedName) throw new Error("Category Name cannot be blank.");
+
+    const existing = await categoryService.getAll(businessId);
+    if (existing.some(c => c.id !== id && c.name.toLowerCase() === trimmedName.toLowerCase())) {
+      throw new Error(`A category named '${trimmedName}' already exists.`);
+    }
+
+    const targetCat = existing.find(c => c.id === id);
+    const oldName = targetCat?.name;
+
+    const path = `businesses/${businessId}/productCategories/${id}`;
+    const now = new Date().toISOString();
+
+    const updatedItem: ProductCategory = {
+      id,
+      name: trimmedName,
+      description: data.description?.trim() || "",
+      status: data.status || "Active",
+      createdAt: targetCat?.createdAt || now,
+      updatedAt: now,
+      createdBy: targetCat?.createdBy || userName,
+    };
+
     try {
-      await deleteDoc(doc(db, "businesses", businessId, "categories", id));
+      await setDoc(doc(db, "businesses", businessId, "productCategories", id), {
+        ...updatedItem,
+        businessId,
+      });
+
+      // If category name changed, update products referencing this category
+      if (oldName && oldName !== trimmedName) {
+        const prodSnapshot = await getDocs(collection(db, `businesses/${businessId}/products`));
+        const updates = prodSnapshot.docs.filter(docSnap => {
+          const p = docSnap.data();
+          return p.categoryId === id || p.category === oldName;
+        });
+
+        for (const docSnap of updates) {
+          await updateDoc(doc(db, `businesses/${businessId}/products`, docSnap.id), {
+            category: trimmedName,
+            categoryId: id,
+            updatedAt: now,
+          });
+        }
+      }
+
+      await systemLogService.logAction(businessId, {
+        category: "Product Catalog",
+        action: "Category Updated",
+        userEmail: userName,
+        userName,
+        userRole: "Staff",
+        details: `Category Updated: '${trimmedName}' (Status: ${updatedItem.status})`,
+        targetId: id,
+        severity: "info",
+      });
+
+      return updatedItem;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  },
+
+  delete: async (businessId: string, id: string, userName: string = "Admin"): Promise<void> => {
+    const existing = await categoryService.getAll(businessId);
+    const cat = existing.find(c => c.id === id);
+    const catName = cat?.name || id;
+    const path = `businesses/${businessId}/productCategories/${id}`;
+
+    try {
+      await deleteDoc(doc(db, "businesses", businessId, "productCategories", id));
+      // Clean up legacy collection if present
+      try {
+        await deleteDoc(doc(db, "businesses", businessId, "categories", id));
+      } catch (e) {
+        // ignore legacy doc deletion error
+      }
+
+      await systemLogService.logAction(businessId, {
+        category: "Product Catalog",
+        action: "Category Deleted",
+        userEmail: userName,
+        userName,
+        userRole: "Staff",
+        details: `Category Deleted: '${catName}'`,
+        targetId: id,
+        severity: "warning",
+      });
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, path);
+    }
+  },
+
+  reassignAndDelete: async (
+    businessId: string, 
+    categoryIdToDelete: string, 
+    targetCategoryId: string, 
+    targetCategoryName: string, 
+    userName: string = "Admin"
+  ): Promise<void> => {
+    const existing = await categoryService.getAll(businessId);
+    const catToDelete = existing.find(c => c.id === categoryIdToDelete);
+    const oldName = catToDelete?.name || categoryIdToDelete;
+    const now = new Date().toISOString();
+
+    try {
+      // Reassign products to target category
+      const prodSnapshot = await getDocs(collection(db, `businesses/${businessId}/products`));
+      const affectedProds = prodSnapshot.docs.filter(docSnap => {
+        const p = docSnap.data();
+        return p.categoryId === categoryIdToDelete || p.category === oldName;
+      });
+
+      for (const docSnap of affectedProds) {
+        await updateDoc(doc(db, `businesses/${businessId}/products`, docSnap.id), {
+          categoryId: targetCategoryId,
+          category: targetCategoryName,
+          updatedAt: now,
+        });
+      }
+
+      // Delete the category document
+      await deleteDoc(doc(db, "businesses", businessId, "productCategories", categoryIdToDelete));
+      try {
+        await deleteDoc(doc(db, "businesses", businessId, "categories", categoryIdToDelete));
+      } catch (e) {
+        // ignore
+      }
+
+      await systemLogService.logAction(businessId, {
+        category: "Product Catalog",
+        action: "Category Deleted",
+        userEmail: userName,
+        userName,
+        userRole: "Staff",
+        details: `Category Deleted: '${oldName}' - ${affectedProds.length} products reassigned to '${targetCategoryName}'`,
+        targetId: categoryIdToDelete,
+        severity: "warning",
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `businesses/${businessId}/productCategories/${categoryIdToDelete}`);
     }
   }
 };

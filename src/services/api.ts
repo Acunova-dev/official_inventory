@@ -18,6 +18,7 @@ import {
 } from "./firestoreApi";
 import { 
   Product, 
+  ProductCategory,
   ProductResponse, 
   Customer, 
   Supplier, 
@@ -132,18 +133,30 @@ export const productService = {
 // CATEGORY SERVICE
 // -------------------------------------------------------------
 export const categoryService = {
-  getAll: async () => {
+  getAll: async (): Promise<ProductCategory[]> => {
     const bId = await getActiveBusinessId();
     return fsCategoryService.getAll(bId);
   },
-  create: async (data: { name: string; description?: string }) => {
+  create: async (data: { name: string; description?: string; status?: "Active" | "Inactive" }): Promise<ProductCategory> => {
     const bId = await getActiveBusinessId();
-    return fsCategoryService.create(bId, data);
+    const userName = auth.currentUser?.displayName || auth.currentUser?.email || "Admin";
+    return fsCategoryService.create(bId, data, userName);
   },
-  delete: async (id: string) => {
+  update: async (id: string, data: { name: string; description?: string; status?: "Active" | "Inactive" }): Promise<ProductCategory> => {
     const bId = await getActiveBusinessId();
-    return fsCategoryService.delete(bId, id);
-  }
+    const userName = auth.currentUser?.displayName || auth.currentUser?.email || "Admin";
+    return fsCategoryService.update(bId, id, data, userName);
+  },
+  delete: async (id: string): Promise<void> => {
+    const bId = await getActiveBusinessId();
+    const userName = auth.currentUser?.displayName || auth.currentUser?.email || "Admin";
+    return fsCategoryService.delete(bId, id, userName);
+  },
+  reassignAndDelete: async (categoryIdToDelete: string, targetCategoryId: string, targetCategoryName: string): Promise<void> => {
+    const bId = await getActiveBusinessId();
+    const userName = auth.currentUser?.displayName || auth.currentUser?.email || "Admin";
+    return fsCategoryService.reassignAndDelete(bId, categoryIdToDelete, targetCategoryId, targetCategoryName, userName);
+  },
 };
 
 // -------------------------------------------------------------
