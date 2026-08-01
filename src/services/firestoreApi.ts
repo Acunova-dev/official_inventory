@@ -37,7 +37,8 @@ import {
   BankLedgerEntry,
   FinancialSummaryReport,
   Invoice,
-  InvoiceLine
+  InvoiceLine,
+  PaymentVoucher
 } from "../types";
 
 import { DEFAULT_COMPANY_SETTINGS, getMergedCompanySettings } from "../constants/defaultSettings";
@@ -1161,6 +1162,7 @@ export const financialService = {
     const cashEntries = await financialService.getCashBook(businessId);
     const bankAccounts = await financialService.getBankAccounts(businessId);
     const receipts = await receiptService.getAll(businessId);
+    const vouchers = await financialService.getPaymentVouchers(businessId);
 
     const cashBalance = cashEntries.length > 0 ? cashEntries[cashEntries.length - 1].runningBalance : 0;
     const totalBankBalance = bankAccounts.reduce((sum, b) => sum + (b.currentBalance || 0), 0);
@@ -1169,6 +1171,9 @@ export const financialService = {
     const validReceipts = receipts.filter(r => r.approvalStatus !== "Reversed");
     const totalReceiptsCollected = validReceipts.reduce((sum, r) => sum + (r.total || 0), 0);
     const totalReceiptsCount = validReceipts.length;
+
+    const validVouchers = vouchers.filter(v => v.status !== "Reversed");
+    const totalVouchersAmount = validVouchers.reduce((sum, v) => sum + (v.amount || 0), 0);
 
     const totalCashInflow = cashEntries.reduce((sum, e) => sum + (e.debit || 0), 0);
     const totalCashOutflow = cashEntries.reduce((sum, e) => sum + (e.credit || 0), 0);
@@ -1186,10 +1191,189 @@ export const financialService = {
       totalReceiptsCollected,
       totalReceiptsCount,
       totalDisbursements: totalCashOutflow,
-      totalPaymentVouchersCount: 0,
-      outstandingSupplierPayments: 0,
+      totalPaymentVouchersCount: validVouchers.length,
+      outstandingSupplierPayments: totalVouchersAmount,
       netCashFlow: totalCashInflow - totalCashOutflow
     };
+  },
+
+  getPaymentVouchers: async (businessId: string): Promise<PaymentVoucher[]> => {
+    const path = `businesses/${businessId}/paymentVouchers`;
+    try {
+      const snap = await getDocs(collection(db, path));
+      const vouchers = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentVoucher));
+      vouchers.sort((a, b) => (b.createdDate || b.date).localeCompare(a.createdDate || a.date));
+      return vouchers;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, path);
+    }
+  },
+
+  createPaymentVoucher: async (
+    businessId: string, 
+    payload: { 
+      supplierId: string; 
+      supplierName?: string;
+      poId?: string;
+      poNumber?: string;
+      supplierInvoiceNo?: string;
+      paymentMethod?: string;
+      amount: number;
+      bankAccountId?: string;
+      purpose?: string;
+      notes?: string;
+    },
+    userName: string = "Admin"
+  ): Promise<PaymentVoucher> => {
+    const id = `pv-${Date.now()}`;
+    const voucherNumber = await financialService.getNextSequenceNumber(businessId, "paymentVouchers", "PV");
+    const path = `businesses/${businessId}/paymentVouchers/${id}`;
+
+    let supplierName = payload.supplierName || "";
+    let supplierEmail = "";
+    let supplierPhone = "";
+    let supplierAddress = "";
+
+    if (payload.supplierId) {
+      try {
+        const supSnap = await getDoc(doc(db, "businesses", businessId, "suppliers", payload.supplierId));
+        if (supSnap.exists()) {
+          const sup = supSnap.data() as Supplier;
+          supplierName = sup.companyName || sup.name || supplierName;
+          supplierEmail = sup.email || "";
+          supplierPhone = sup.phone || "";
+          supplierAddress = sup.address || "";
+        }
+      } catch (err) {
+        console.warn("Could not fetch supplier details for payment voucher:", err);
+      }
+    }
+    if (!supplierName) supplierName = "Supplier";
+
+    let poNumber = payload.poNumber || "";
+    if (payload.poId && !poNumber) {
+      try {
+        const poSnap = await getDoc(doc(db, "businesses", businessId, "purchaseOrders", payload.poId));
+        if (poSnap.exists()) {
+          poNumber = (poSnap.data() as PurchaseOrder).poNumber;
+        }
+      } catch (e) {
+        console.warn("Could not fetch PO for payment voucher:", e);
+      }
+    }
+
+    let bankAccountName = "";
+    if (payload.bankAccountId && payload.paymentMethod !== "Cash") {
+      try {
+        const bankSnap = await getDoc(doc(db, "businesses", businessId, "bankAccounts", payload.bankAccountId));
+        if (bankSnap.exists()) {
+          const b = bankSnap.data() as BankAccount;
+          bankAccountName = `${b.bankName} (${b.accountNumber})`;
+        }
+      } catch (e) {
+        console.warn("Could not fetch bank account for payment voucher:", e);
+      }
+    }
+
+    const pv: PaymentVoucher = {
+      id,
+      voucherNumber,
+      supplierId: payload.supplierId,
+      supplierName,
+      supplierEmail,
+      supplierPhone,
+      supplierAddress,
+      poId: payload.poId,
+      poNumber: poNumber || undefined,
+      supplierInvoiceNo: payload.supplierInvoiceNo,
+      date: new Date().toISOString().split("T")[0],
+      paymentDate: new Date().toISOString().split("T")[0],
+      paymentMethod: payload.paymentMethod || "Cash",
+      amount: Number(payload.amount),
+      currency: "$",
+      purpose: payload.purpose || `Vendor payment to ${supplierName}`,
+      bankAccountId: payload.bankAccountId,
+      bankAccountName: bankAccountName || undefined,
+      paidBy: userName,
+      status: "Issued",
+      notes: payload.notes || "",
+      createdBy: userName,
+      createdDate: new Date().toISOString()
+    };
+
+    try {
+      await setDoc(doc(db, "businesses", businessId, "paymentVouchers", id), { ...pv, businessId });
+
+      if (payload.paymentMethod === "Cash") {
+        await financialService.createCashAdjustment(businessId, {
+          type: "Credit",
+          amount: Number(payload.amount),
+          category: "Vendor Payment",
+          description: `Payment Voucher #${voucherNumber} (${supplierName})`,
+          referenceDoc: voucherNumber,
+          date: pv.date,
+          supplierId: payload.supplierId,
+          paymentMethod: "Cash"
+        });
+      } else if (payload.bankAccountId) {
+        await financialService.recordBankTransaction(businessId, {
+          bankAccountId: payload.bankAccountId,
+          type: "EFT Payment",
+          amount: Number(payload.amount),
+          description: `Disbursement Payment Voucher #${voucherNumber} to ${supplierName}`,
+          referenceDoc: voucherNumber,
+          date: pv.date
+        });
+      }
+
+      return pv;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, path);
+    }
+  },
+
+  reversePaymentVoucher: async (businessId: string, id: string, reason: string, userName: string = "Admin"): Promise<PaymentVoucher> => {
+    const path = `businesses/${businessId}/paymentVouchers/${id}`;
+    try {
+      const refDoc = doc(db, "businesses", businessId, "paymentVouchers", id);
+      const snap = await getDoc(refDoc);
+      if (!snap.exists()) throw new Error("Payment Voucher not found");
+
+      const pv = snap.data() as PaymentVoucher;
+      if (pv.status === "Reversed") throw new Error("Payment Voucher is already reversed");
+
+      await updateDoc(refDoc, {
+        status: "Reversed",
+        reversalReason: reason,
+        updatedAt: new Date().toISOString()
+      });
+
+      if (pv.paymentMethod === "Cash") {
+        await financialService.createCashAdjustment(businessId, {
+          type: "Debit",
+          amount: pv.amount,
+          category: "Voucher Reversal",
+          description: `Reversal of Payment Voucher #${pv.voucherNumber}: ${reason}`,
+          referenceDoc: `REV-${pv.voucherNumber}`,
+          date: new Date().toISOString().split("T")[0],
+          supplierId: pv.supplierId,
+          paymentMethod: "Cash"
+        });
+      } else if (pv.bankAccountId) {
+        await financialService.recordBankTransaction(businessId, {
+          bankAccountId: pv.bankAccountId,
+          type: "Reversal",
+          amount: pv.amount,
+          description: `Reversal of Payment Voucher #${pv.voucherNumber}: ${reason}`,
+          referenceDoc: `REV-${pv.voucherNumber}`,
+          date: new Date().toISOString().split("T")[0]
+        });
+      }
+
+      return { ...pv, status: "Reversed", reversalReason: reason };
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
   }
 };
 
@@ -2113,21 +2297,62 @@ export const purchasingService = {
     }
   },
 
-  createOrder: async (businessId: string, payload: { supplierId: string; supplierName?: string; expectedDeliveryDate?: string; items: Array<{ productId: string; quantity: number; unitCost?: number }>; notes?: string }, userName: string = "Purchasing Agent"): Promise<PurchaseOrder> => {
+  createOrder: async (businessId: string, payload: { supplierId: string; supplierName?: string; supplierEmail?: string; supplierPhone?: string; supplierAddress?: string; expectedDeliveryDate?: string; items: Array<{ productId: string; productName?: string; sku?: string; quantity: number; unitCost?: number }>; notes?: string }, userName: string = "Purchasing Agent"): Promise<PurchaseOrder> => {
     const id = `po-${Date.now()}`;
-    const poNumber = `PO-${Date.now().toString().slice(-6)}`;
+    const poNumber = await financialService.getNextSequenceNumber(businessId, "purchaseOrders", "PO");
     const path = `businesses/${businessId}/purchaseOrders/${id}`;
+
+    let supplierName = payload.supplierName || "";
+    let supplierEmail = payload.supplierEmail || "";
+    let supplierPhone = payload.supplierPhone || "";
+    let supplierAddress = payload.supplierAddress || "";
+
+    if (payload.supplierId) {
+      try {
+        const supSnap = await getDoc(doc(db, "businesses", businessId, "suppliers", payload.supplierId));
+        if (supSnap.exists()) {
+          const sup = supSnap.data() as Supplier;
+          supplierName = sup.companyName || sup.name || supplierName;
+          supplierEmail = sup.email || supplierEmail;
+          supplierPhone = sup.phone || supplierPhone;
+          supplierAddress = sup.address || supplierAddress;
+        }
+      } catch (err) {
+        console.warn("Could not fetch supplier details for PO creation:", err);
+      }
+    }
+    if (!supplierName) supplierName = "Supplier";
 
     const items = [];
     let subtotal = 0;
     for (const item of payload.items) {
-      const unitCost = item.unitCost || 50;
+      let prodName = item.productName || "";
+      let sku = item.sku || "";
+      let unitCost = item.unitCost || 0;
+
+      if (item.productId) {
+        try {
+          const prodSnap = await getDoc(doc(db, "businesses", businessId, "products", item.productId));
+          if (prodSnap.exists()) {
+            const prod = prodSnap.data() as Product;
+            prodName = prodName || prod.name;
+            sku = sku || prod.sku || prod.barcode || `SKU-${prod.id.slice(-4)}`;
+            if (!unitCost) unitCost = prod.costPrice || prod.sellingPrice || 0;
+          }
+        } catch (e) {
+          console.warn("Could not fetch product for PO item:", e);
+        }
+      }
+      if (!prodName) prodName = "Item";
+      if (!sku) sku = item.productId ? `SKU-${item.productId.slice(-4)}` : "SKU-001";
+      if (!unitCost) unitCost = 50;
+
       const itemSubtotal = item.quantity * unitCost;
       subtotal += itemSubtotal;
       items.push({
         productId: item.productId,
-        productName: "Item",
-        sku: `SKU-${item.productId.slice(-4)}`,
+        productName: prodName,
+        sku,
         quantity: item.quantity,
         receivedQuantity: 0,
         unitCost,
@@ -2144,7 +2369,10 @@ export const purchasingService = {
       id,
       poNumber,
       supplierId: payload.supplierId,
-      supplierName: payload.supplierName || "Supplier",
+      supplierName,
+      supplierEmail,
+      supplierPhone,
+      supplierAddress,
       date: new Date().toISOString().split("T")[0],
       orderDate: new Date().toISOString().split("T")[0],
       expectedDeliveryDate: payload.expectedDeliveryDate || new Date(Date.now() + 7*86400000).toISOString().split("T")[0],
@@ -2190,14 +2418,58 @@ export const purchasingService = {
 
   createGoodsReceived: async (businessId: string, payload: { poId: string; deliveryNoteNumber?: string; warehouseLocation?: string; items: Array<{ productId: string; receivedQty: number; acceptedQty?: number; rejectedQty?: number; damagedQty?: number }>; notes?: string }, userName: string = "Warehouse"): Promise<GoodsReceivedNote> => {
     const id = `grn-${Date.now()}`;
-    const grnNumber = `GRN-${Date.now().toString().slice(-6)}`;
+    const grnNumber = await financialService.getNextSequenceNumber(businessId, "goodsReceivedNotes", "GRN");
     const path = `businesses/${businessId}/goodsReceivedNotes/${id}`;
 
+    let poNumber = `PO-${payload.poId.slice(-6)}`;
+    let supplierId = "";
+    let supplierName = "Supplier";
+    let supplierEmail = "";
+    let supplierPhone = "";
+    let supplierAddress = "";
+    const poItemsMap: Record<string, any> = {};
+
+    try {
+      const poSnap = await getDoc(doc(db, "businesses", businessId, "purchaseOrders", payload.poId));
+      if (poSnap.exists()) {
+        const po = poSnap.data() as PurchaseOrder;
+        poNumber = po.poNumber;
+        supplierId = po.supplierId;
+        supplierName = po.supplierName;
+        supplierEmail = po.supplierEmail || "";
+        supplierPhone = po.supplierPhone || "";
+        supplierAddress = po.supplierAddress || "";
+        (po.items || []).forEach(it => {
+          poItemsMap[it.productId] = it;
+        });
+      }
+    } catch (e) {
+      console.warn("Could not fetch PO for GRN:", e);
+    }
+
+    const grnItems = [];
     for (const item of payload.items) {
       const prodRef = doc(db, "businesses", businessId, "products", item.productId);
       const prodSnap = await getDoc(prodRef);
+      let prodName = "Item";
+      let sku = `SKU-${item.productId.slice(-4)}`;
+      let unitCost = 50;
+      let orderedQty = item.receivedQty;
+
+      if (poItemsMap[item.productId]) {
+        const poIt = poItemsMap[item.productId];
+        prodName = poIt.productName || prodName;
+        sku = poIt.sku || sku;
+        unitCost = poIt.unitCost || unitCost;
+        orderedQty = poIt.quantity || orderedQty;
+      }
+
       if (prodSnap.exists()) {
         const prod = prodSnap.data() as Product;
+        prodName = prod.name || prodName;
+        sku = prod.sku || prod.barcode || sku;
+        if (!unitCost) unitCost = prod.costPrice || prod.sellingPrice || 50;
+
         const addQty = item.acceptedQty !== undefined ? item.acceptedQty : item.receivedQty;
         const newQty = prod.quantity + addQty;
         
@@ -2214,38 +2486,43 @@ export const purchasingService = {
           quantity: addQty,
           previousStock: prod.quantity,
           newStock: newQty,
-          reason: `Goods Received Note #${grnNumber} (PO #${payload.poId})`,
+          reason: `Goods Received Note #${grnNumber} (PO #${poNumber})`,
           referenceNumber: grnNumber,
           userId: "current-user",
           userName,
         });
       }
+
+      grnItems.push({
+        productId: item.productId,
+        productName: prodName,
+        sku,
+        orderedQty,
+        receivedQty: item.receivedQty,
+        acceptedQty: item.acceptedQty ?? item.receivedQty,
+        rejectedQty: item.rejectedQty ?? 0,
+        damagedQty: item.damagedQty ?? 0,
+        unitCost
+      });
     }
 
     const grn: GoodsReceivedNote = {
       id,
       grnNumber,
       poId: payload.poId,
-      poNumber: `PO-${payload.poId.slice(-6)}`,
-      supplierId: "sup-1",
-      supplierName: "Supplier",
+      poNumber,
+      supplierId,
+      supplierName,
+      supplierEmail,
+      supplierPhone,
+      supplierAddress,
       deliveryNoteNumber: payload.deliveryNoteNumber || `DN-${Date.now().toString().slice(-6)}`,
       date: new Date().toISOString().split("T")[0],
       dateReceived: new Date().toISOString().split("T")[0],
       receivedBy: userName,
       receiverName: userName,
       warehouseLocation: payload.warehouseLocation || "Main Warehouse",
-      items: payload.items.map(i => ({
-        productId: i.productId,
-        productName: "Item",
-        sku: `SKU-${i.productId.slice(-4)}`,
-        orderedQty: i.receivedQty,
-        receivedQty: i.receivedQty,
-        acceptedQty: i.acceptedQty ?? i.receivedQty,
-        rejectedQty: i.rejectedQty ?? 0,
-        damagedQty: i.damagedQty ?? 0,
-        unitCost: 50
-      })),
+      items: grnItems,
       status: "Approved",
       notes: payload.notes || "",
       createdBy: userName,

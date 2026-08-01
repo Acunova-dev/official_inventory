@@ -357,7 +357,7 @@ export const purchasingService = {
     const bId = await getActiveBusinessId();
     return fsPurchasingService.getOrders(bId);
   },
-  createOrder: async (payload: { supplierId: string; supplierName?: string; expectedDeliveryDate?: string; items: Array<{ productId: string; quantity: number; unitCost?: number }>; notes?: string }): Promise<PurchaseOrder> => {
+  createOrder: async (payload: { supplierId: string; supplierName?: string; supplierEmail?: string; supplierPhone?: string; supplierAddress?: string; expectedDeliveryDate?: string; items: Array<{ productId: string; productName?: string; sku?: string; quantity: number; unitCost?: number }>; notes?: string }): Promise<PurchaseOrder> => {
     const bId = await getActiveBusinessId();
     const userName = auth.currentUser?.displayName || auth.currentUser?.email || "Purchasing Agent";
     return fsPurchasingService.createOrder(bId, payload, userName);

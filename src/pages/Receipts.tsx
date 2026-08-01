@@ -27,7 +27,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { UnifiedDocumentModal } from "../components/UnifiedDocumentModal";
 import { getMergedCompanySettings } from "../constants/defaultSettings";
-import { normalizeDocument, exportDocumentToPdf } from "../utils/documentPrinter";
+import { normalizeDocument, enrichDocumentData, exportDocumentToPdf } from "../utils/documentPrinter";
 
 const receiptFormSchema = z.object({
   customerId: z.string().min(1, { message: "Please select a checkout customer account." }),
@@ -97,7 +97,7 @@ export const Receipts: React.FC = () => {
 
   // Mutations
   const createMutation = useMutation({
-    mutationFn: (payload: { customerId: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; paymentMethod?: string; bankAccountId?: string }) => receiptService.create(payload),
+    mutationFn: (payload: { customerId: string; customerName?: string; customerEmail?: string; customerPhone?: string; customerAddress?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; paymentMethod?: string; bankAccountId?: string }) => receiptService.create(payload),
     onSuccess: (newRec) => {
       queryClient.invalidateQueries({ queryKey: ["receipts"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
@@ -177,6 +177,11 @@ export const Receipts: React.FC = () => {
   const selectedReceipt = receipts.find(r => r.id === selectedReceiptId);
 
   const checkoutReceipt = (values: any) => {
+    const cust = customers.find(c => c.id === values.customerId);
+    if (!cust) {
+      showToast("Selected customer record could not be resolved. Please select a valid customer.", "error");
+      return;
+    }
     const isTaxOn = values.enableTax;
     let tr = 0;
     if (isTaxOn) {
@@ -185,6 +190,10 @@ export const Receipts: React.FC = () => {
     }
     createMutation.mutate({
       customerId: values.customerId,
+      customerName: cust.name,
+      customerEmail: cust.email,
+      customerPhone: cust.phone,
+      customerAddress: cust.address,
       paymentMethod: values.paymentMethod || "Cash",
       bankAccountId: values.bankAccountId,
       items: values.items,
@@ -198,7 +207,8 @@ export const Receipts: React.FC = () => {
     try {
       showToast("Generating official receipt PDF...", "info");
       const companySettings = getMergedCompanySettings(serverSettings);
-      const normDoc = normalizeDocument("receipt", rec, companySettings.currency || "USD");
+      const enrichedRec = enrichDocumentData("receipt", rec, { customers, suppliers: [], products });
+      const normDoc = normalizeDocument("receipt", enrichedRec, companySettings.currency || "USD");
       const fileName = `${companySettings.companyName.replace(/\s+/g, '_')}_RECEIPT_${rec.receiptNumber}.pdf`;
       await exportDocumentToPdf(normDoc, companySettings, fileName, { paperSize: "a4", orientation: "portrait" });
       showToast("Receipt PDF downloaded successfully!", "success");

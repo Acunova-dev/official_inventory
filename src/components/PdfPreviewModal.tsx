@@ -348,7 +348,7 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-900">
                 {lines.map((line, index) => {
-                  const lineTax = line.totalPrice * 0;
+                  const lineTax = line.totalPrice * 0.15;
                   const itemCode = `ITEM-${1000 + index}`;
                   return (
                     <tr key={index} className="hover:bg-slate-50">

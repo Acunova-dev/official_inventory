@@ -7,7 +7,10 @@ import {
   GoodsReceivedNote, 
   Quotation, 
   Invoice,
-  CompanySettings 
+  CompanySettings,
+  Supplier,
+  Customer,
+  Product
 } from "../types";
 import { DEFAULT_COMPANY_SETTINGS, getMergedCompanySettings } from "../constants/defaultSettings";
 
@@ -74,6 +77,110 @@ export type PaperSize = "a4" | "a5" | "letter" | "thermal";
 export type PageOrientation = "portrait" | "landscape";
 
 /**
+ * Enriches document data by resolving missing supplier, customer, and product fields against stored DB records.
+ */
+export function enrichDocumentData(
+  type: SupportedDocumentType,
+  data: any,
+  lookup?: {
+    suppliers?: Supplier[];
+    customers?: Customer[];
+    products?: Product[];
+  }
+) {
+  if (!data) return data;
+  const enriched = { ...data };
+  const suppliers = lookup?.suppliers || [];
+  const customers = lookup?.customers || [];
+  const products = lookup?.products || [];
+
+  // 1. Supplier Resolution (for PO, GRN, Payment Voucher)
+  if (type === "po" || type === "grn" || type === "payment_voucher") {
+    const supId = enriched.supplierId;
+    const supName = enriched.supplierName;
+    const foundSup = suppliers.find(
+      (s) => (supId && s.id === supId) || (supName && (s.companyName === supName || s.name === supName))
+    );
+    if (foundSup) {
+      if (!enriched.supplierName || enriched.supplierName === "Supplier" || enriched.supplierName === "Vendor") {
+        enriched.supplierName = foundSup.companyName || foundSup.name || enriched.supplierName;
+      }
+      enriched.supplierEmail = enriched.supplierEmail || foundSup.email || "";
+      enriched.supplierPhone = enriched.supplierPhone || foundSup.phone || "";
+      enriched.supplierAddress = enriched.supplierAddress || foundSup.address || "";
+    }
+  }
+
+  // 2. Customer Resolution (for Receipt, Quotation, Invoice)
+  if (type === "receipt" || type === "quotation" || type === "invoice") {
+    const custId = enriched.customerId;
+    const custName = enriched.customerName;
+    const foundCust = customers.find(
+      (c) => (custId && c.id === custId) || (custName && c.name === custName)
+    );
+    if (foundCust) {
+      if (!enriched.customerName || enriched.customerName === "Customer" || enriched.customerName === "Valued Customer") {
+        enriched.customerName = foundCust.name || enriched.customerName;
+      }
+      enriched.customerEmail = enriched.customerEmail || foundCust.email || "";
+      enriched.customerPhone = enriched.customerPhone || foundCust.phone || "";
+      enriched.customerAddress = enriched.customerAddress || foundCust.address || "";
+    }
+  }
+
+  // 3. Line Items Product Resolution
+  // Purchase Order & GRN items
+  if (Array.isArray(enriched.items)) {
+    enriched.items = enriched.items.map((item: any) => {
+      const prod = products.find(
+        (p) => (item.productId && p.id === item.productId) || (item.productName && p.name === item.productName)
+      );
+      const productName =
+        item.productName && item.productName !== "Item" && item.productName !== "Product"
+          ? item.productName
+          : prod?.name || item.productName || "Item";
+      let sku = item.sku;
+      if (!sku || sku.includes("--")) {
+        sku = prod?.sku || prod?.barcode || (item.productId ? `SKU-${item.productId.replace(/^[^\w]+/, '').slice(-4)}` : undefined);
+      }
+
+      return {
+        ...item,
+        productName,
+        sku,
+        unitCost: item.unitCost ?? prod?.costPrice ?? prod?.sellingPrice ?? 0,
+      };
+    });
+  }
+
+  // Quotation, Invoice, Receipt lines
+  if (Array.isArray(enriched.lines)) {
+    enriched.lines = enriched.lines.map((line: any) => {
+      const prod = products.find(
+        (p) => (line.productId && p.id === line.productId) || (line.productName && p.name === line.productName)
+      );
+      const productName =
+        line.productName && line.productName !== "Item" && line.productName !== "Product"
+          ? line.productName
+          : prod?.name || line.productName || "Item";
+      let sku = line.sku;
+      if (!sku || sku.includes("--")) {
+        sku = prod?.sku || prod?.barcode || (line.productId ? `SKU-${line.productId.replace(/^[^\w]+/, '').slice(-4)}` : undefined);
+      }
+
+      return {
+        ...line,
+        productName,
+        sku,
+        unitPrice: line.unitPrice ?? prod?.sellingPrice ?? 0,
+      };
+    });
+  }
+
+  return enriched;
+}
+
+/**
  * Transforms any document data structure into a normalized print representation.
  */
 export function normalizeDocument(
@@ -93,21 +200,28 @@ export function normalizeDocument(
         date: po.date || po.orderDate,
         status: po.status,
         partyLabel: "SUPPLIER / VENDOR DETAILS",
-        partyName: po.supplierName,
+        partyName: po.supplierName || "Supplier",
+        partyEmail: po.supplierEmail,
+        partyPhone: po.supplierPhone,
+        partyAddress: po.supplierAddress,
         metaFields: [
           { label: "Expected Delivery Date", value: po.expectedDeliveryDate || "N/A" },
           { label: "Order Date", value: po.orderDate || po.createdDate || "N/A" },
           { label: "Created By", value: po.createdBy || "System Admin" },
         ],
-        lines: (po.items || []).map((item, idx) => ({
-          id: item.productId || `item-${idx}`,
-          codeOrSku: item.sku || `SKU-${idx + 1}`,
-          description: item.productName,
-          quantity: item.quantity,
-          unitCostOrPrice: item.unitCost,
-          total: item.total || item.subtotal || (item.quantity * item.unitCost),
-          remarks: item.receivedQuantity > 0 ? `Received: ${item.receivedQuantity}` : undefined
-        })),
+        lines: (po.items || []).map((item, idx) => {
+          const rawSku = item.sku || (item.productId ? `SKU-${item.productId.replace(/^[^\w]+/, '').slice(-4)}` : `SKU-${idx + 1}`);
+          const cleanSku = rawSku.replace(/SKU-+/g, 'SKU-');
+          return {
+            id: item.productId || `item-${idx}`,
+            codeOrSku: cleanSku,
+            description: item.productName || "Item",
+            quantity: item.quantity,
+            unitCostOrPrice: item.unitCost,
+            total: item.total || item.subtotal || (item.quantity * item.unitCost),
+            remarks: item.receivedQuantity > 0 ? `Received: ${item.receivedQuantity}` : undefined
+          };
+        }),
         currency,
         subtotal: po.subtotal || po.totalAmount,
         discountAmount: 0,
@@ -128,7 +242,7 @@ export function normalizeDocument(
         date: rec.date || rec.createdDate,
         status: rec.approvalStatus || "Approved",
         partyLabel: "CUSTOMER / ACCOUNT DETAILS",
-        partyName: rec.customerName,
+        partyName: rec.customerName || "Valued Customer",
         partyEmail: rec.customerEmail,
         partyPhone: rec.customerPhone,
         partyAddress: rec.customerAddress,
@@ -138,14 +252,18 @@ export function normalizeDocument(
           { label: "Reference #", value: rec.referenceNumber || "N/A" },
           { label: "Cashier / Served By", value: rec.createdBy || "Store Clerk" }
         ],
-        lines: (rec.lines || []).map((line, idx) => ({
-          id: line.productId || `line-${idx}`,
-          codeOrSku: `ITEM-${idx + 1}`,
-          description: line.productName,
-          quantity: line.quantity,
-          unitCostOrPrice: line.unitPrice,
-          total: line.totalPrice
-        })),
+        lines: (rec.lines || []).map((line, idx) => {
+          const rawSku = line.sku || (line.productId ? `SKU-${line.productId.replace(/^[^\w]+/, '').slice(-4)}` : `ITEM-${idx + 1}`);
+          const cleanSku = rawSku.replace(/SKU-+/g, 'SKU-');
+          return {
+            id: line.productId || `line-${idx}`,
+            codeOrSku: cleanSku,
+            description: line.productName || "Item",
+            quantity: line.quantity,
+            unitCostOrPrice: line.unitPrice,
+            total: line.totalPrice
+          };
+        }),
         currency,
         subtotal: rec.subtotal,
         discountAmount: rec.discountAmount || 0,
@@ -169,6 +287,9 @@ export function normalizeDocument(
         status: pv.status,
         partyLabel: "PAYEE / BENEFICIARY DETAILS",
         partyName: pv.supplierName,
+        partyEmail: pv.supplierEmail,
+        partyPhone: pv.supplierPhone,
+        partyAddress: pv.supplierAddress,
         metaFields: [
           { label: "Payment Method", value: pv.paymentMethod },
           { label: "Purpose / Description", value: pv.purpose },
@@ -213,6 +334,9 @@ export function normalizeDocument(
         status: "Received & Verified",
         partyLabel: "SUPPLIER DETAILS",
         partyName: grn.supplierName,
+        partyEmail: grn.supplierEmail,
+        partyPhone: grn.supplierPhone,
+        partyAddress: grn.supplierAddress,
         metaFields: [
           { label: "Related PO #", value: grn.poNumber },
           { label: "Delivery Note #", value: grn.deliveryNoteNumber || "N/A" },
@@ -221,8 +345,8 @@ export function normalizeDocument(
         ],
         lines: (grn.items || []).map((item, idx) => ({
           id: item.productId || `grn-item-${idx}`,
-          codeOrSku: item.sku || `SKU-${idx + 1}`,
-          description: item.productName,
+          codeOrSku: item.sku || (item.productId ? `SKU-${item.productId.slice(-4)}` : `SKU-${idx + 1}`),
+          description: item.productName || "Item",
           quantity: item.receivedQty,
           unitCostOrPrice: item.unitCost || 0,
           total: (item.receivedQty * (item.unitCost || 0)),
@@ -261,8 +385,8 @@ export function normalizeDocument(
         ],
         lines: (q.lines || []).map((line, idx) => ({
           id: line.productId || `q-line-${idx}`,
-          codeOrSku: `ITEM-${1000 + idx}`,
-          description: line.productName,
+          codeOrSku: line.sku || (line.productId ? `SKU-${line.productId.slice(-4)}` : `ITEM-${1000 + idx}`),
+          description: line.productName || "Item",
           quantity: line.quantity,
           unitCostOrPrice: line.unitPrice,
           total: line.totalPrice
@@ -308,8 +432,8 @@ export function normalizeDocument(
         metaFields,
         lines: (inv.lines || []).map((line, idx) => ({
           id: line.productId || `inv-line-${idx}`,
-          codeOrSku: `ITEM-${1000 + idx}`,
-          description: line.productName,
+          codeOrSku: line.sku || (line.productId ? `SKU-${line.productId.slice(-4)}` : `ITEM-${1000 + idx}`),
+          description: line.productName || "Item",
           quantity: line.quantity,
           unitCostOrPrice: line.unitPrice,
           total: line.totalPrice

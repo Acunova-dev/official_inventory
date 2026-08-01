@@ -34,7 +34,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { UnifiedDocumentModal } from "../components/UnifiedDocumentModal";
 import { DocumentOcrModal } from "../components/DocumentOcrModal";
 import { PrintConfirmationModal } from "../components/PrintConfirmationModal";
-import { normalizeDocument, exportDocumentToPdf } from "../utils/documentPrinter";
+import { normalizeDocument, enrichDocumentData, exportDocumentToPdf } from "../utils/documentPrinter";
 
 // Form validation schema
 const quotationFormSchema = z.object({
@@ -325,7 +325,8 @@ export const Quotations: React.FC = () => {
       showToast("Generating official quote PDF...", "info");
       const companySettings = getMergedCompanySettings(serverSettings);
       const enrichedQuote = getEnrichedQuote(quote);
-      const normDoc = normalizeDocument("quotation", enrichedQuote, companySettings.currency || "USD");
+      const fullyEnriched = enrichDocumentData("quotation", enrichedQuote, { customers, suppliers: [], products });
+      const normDoc = normalizeDocument("quotation", fullyEnriched, companySettings.currency || "USD");
       const fileName = `${companySettings.companyName.replace(/\s+/g, '_')}_QUOTATION_${quote.quotationNumber}.pdf`;
       await exportDocumentToPdf(normDoc, companySettings, fileName, { paperSize: "a4", orientation: "portrait" });
       showToast("PDF document downloaded successfully!", "success");

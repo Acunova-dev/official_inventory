@@ -394,6 +394,7 @@ export interface User {
 export interface QuotationLine {
   productId: string;
   productName: string;
+  sku?: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -434,6 +435,7 @@ export interface Quotation {
 export interface InvoiceLine {
   productId: string;
   productName: string;
+  sku?: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -479,6 +481,7 @@ export interface Invoice {
 export interface ReceiptLine {
   productId: string;
   productName: string;
+  sku?: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -593,6 +596,9 @@ export interface PurchaseOrder {
   poNumber: string; // PO-2026-000001
   supplierId: string;
   supplierName: string;
+  supplierEmail?: string;
+  supplierPhone?: string;
+  supplierAddress?: string;
   date: string;
   orderDate: string;
   expectedDeliveryDate: string;
@@ -627,6 +633,9 @@ export interface GoodsReceivedNote {
   poNumber: string;
   supplierId: string;
   supplierName: string;
+  supplierEmail?: string;
+  supplierPhone?: string;
+  supplierAddress?: string;
   deliveryNoteNumber: string;
   date: string;
   dateReceived: string;
@@ -646,6 +655,9 @@ export interface PaymentVoucher {
   voucherNumber: string; // PV-2026-000001
   supplierId: string;
   supplierName: string;
+  supplierEmail?: string;
+  supplierPhone?: string;
+  supplierAddress?: string;
   poId?: string;
   poNumber?: string;
   supplierInvoiceNo?: string;

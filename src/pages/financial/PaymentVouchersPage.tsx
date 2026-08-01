@@ -116,8 +116,17 @@ export const PaymentVouchersPage: React.FC = () => {
       addToast("Please enter a valid disbursement amount", "warning");
       return;
     }
+    const selectedSup = suppliers.find(s => s.id === supplierId);
+    if (!selectedSup) {
+      addToast("Selected vendor/supplier record could not be resolved. Please select a valid supplier.", "error");
+      return;
+    }
     createMutation.mutate({
       supplierId,
+      supplierName: selectedSup.companyName || selectedSup.name,
+      supplierEmail: selectedSup.email,
+      supplierPhone: selectedSup.phone,
+      supplierAddress: selectedSup.address,
       poId: poId || undefined,
       supplierInvoiceNo: supplierInvoiceNo || undefined,
       paymentMethod,

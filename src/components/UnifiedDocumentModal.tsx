@@ -20,11 +20,12 @@ import {
   Smartphone,
   Receipt as ReceiptIcon
 } from "lucide-react";
-import { settingsService } from "../services/api";
+import { settingsService, customerService, supplierService, productService } from "../services/api";
 import { getMergedCompanySettings } from "../constants/defaultSettings";
 import { 
   SupportedDocumentType, 
-  normalizeDocument, 
+  normalizeDocument,
+  enrichDocumentData,
   exportDocumentToPdf, 
   exportElementToPdf, 
   triggerDocumentPrint,
@@ -62,11 +63,30 @@ export const UnifiedDocumentModal: React.FC<UnifiedDocumentModalProps> = ({
     queryFn: settingsService.get
   });
 
+  const { data: rawCustomers } = useQuery({
+    queryKey: ["customers-dropdown"],
+    queryFn: () => customerService.getAll(),
+  });
+  const customers = Array.isArray(rawCustomers) ? rawCustomers : [];
+
+  const { data: rawSuppliers } = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: () => supplierService.getAll(),
+  });
+  const suppliers = Array.isArray(rawSuppliers) ? rawSuppliers : [];
+
+  const { data: productsData } = useQuery({
+    queryKey: ["products-dropdown"],
+    queryFn: () => productService.getAll(),
+  });
+  const products = Array.isArray(productsData?.products) ? productsData.products : [];
+
   if (!isOpen || !document || !document.data) return null;
 
   const companySettings = getMergedCompanySettings(settings);
   const currencyDefault = companySettings.currency || "USD";
-  const normDoc = normalizeDocument(document.type, document.data, currencyDefault);
+  const enrichedData = enrichDocumentData(document.type, document.data, { customers, suppliers, products });
+  const normDoc = normalizeDocument(document.type, enrichedData, currencyDefault);
 
   // Company Brand Data
   const companyName = companySettings.companyName;

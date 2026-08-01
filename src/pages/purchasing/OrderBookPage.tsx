@@ -136,10 +136,31 @@ export const OrderBookPage: React.FC = () => {
       return;
     }
 
+    const selectedSup = suppliers.find(s => s.id === selectedSupplierId);
+    if (!selectedSup) {
+      addToast("Selected supplier record could not be resolved. Please select a valid supplier.", "error");
+      return;
+    }
+
+    const enrichedItems = orderItems.map(item => {
+      const prod = products.find(p => p.id === item.productId);
+      return {
+        productId: item.productId,
+        productName: prod?.name || "Item",
+        sku: prod?.sku || prod?.barcode || (item.productId ? `SKU-${item.productId.slice(-4)}` : undefined),
+        quantity: item.quantity,
+        unitCost: item.unitCost
+      };
+    });
+
     createMutation.mutate({
       supplierId: selectedSupplierId,
+      supplierName: selectedSup.companyName || selectedSup.name,
+      supplierEmail: selectedSup.email,
+      supplierPhone: selectedSup.phone,
+      supplierAddress: selectedSup.address,
       expectedDeliveryDate: expectedDeliveryDate || undefined,
-      items: orderItems,
+      items: enrichedItems,
       notes
     });
   };

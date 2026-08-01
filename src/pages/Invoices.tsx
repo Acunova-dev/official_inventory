@@ -157,8 +157,17 @@ export const Invoices: React.FC = () => {
   // Invoice creation mutation
   const createInvoiceMutation = useMutation({
     mutationFn: (data: InvoiceFormValues) => {
+      const cust = customers.find(c => c.id === data.customerId);
+      if (!cust) {
+        showToast("Selected customer record could not be resolved. Please select a valid customer.", "error");
+        throw new Error("Invalid customer selected.");
+      }
       return invoiceService.create({
         customerId: data.customerId,
+        customerName: cust.name,
+        customerEmail: cust.email,
+        customerPhone: cust.phone,
+        customerAddress: cust.address,
         dueDate: data.dueDate,
         items: data.items,
         discountRate: Number(data.discountRate),
