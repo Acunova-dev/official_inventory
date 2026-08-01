@@ -225,6 +225,10 @@
       "schema": "Category",
       "description": "Product categories"
     },
+    "/businesses/{businessId}/productCategories/{categoryId}": {
+      "schema": "Category",
+      "description": "Product categories"
+    },
     "/businesses/{businessId}/suppliers/{supplierId}": {
       "schema": "Supplier",
       "description": "Suppliers"
