@@ -20,9 +20,11 @@ export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   taxRate: 0,
   tinNumber: "2002535002",
   registrationNumber: "",
-  bankName: "",
+  bankName: "Stanbic Bank Bulawayo",
   accountName: "Acunova Pvt Ltd",
   accountNumber: "0112458920101",
+  rtgsAccountNumber: "0112458920101",
+  usdAccountNumber: "9140001827461",
   ecocashNumber: "+263 774 938 581",
   currency: "USD",
   salesType: "ALL",
@@ -38,6 +40,7 @@ export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
  */
 export function getMergedCompanySettings(settings?: Partial<CompanySettings> | null): CompanySettings {
   if (!settings) return DEFAULT_COMPANY_SETTINGS;
+  const legacyAccount = settings.accountNumber || DEFAULT_COMPANY_SETTINGS.accountNumber;
   return {
     companyName: settings.companyName || DEFAULT_COMPANY_SETTINGS.companyName,
     companySubtitle: settings.companySubtitle || DEFAULT_COMPANY_SETTINGS.companySubtitle,
@@ -61,6 +64,8 @@ export function getMergedCompanySettings(settings?: Partial<CompanySettings> | n
     bankName: settings.bankName || DEFAULT_COMPANY_SETTINGS.bankName,
     accountName: settings.accountName || settings.companyName || DEFAULT_COMPANY_SETTINGS.accountName,
     accountNumber: settings.accountNumber || DEFAULT_COMPANY_SETTINGS.accountNumber,
+    rtgsAccountNumber: settings.rtgsAccountNumber || settings.accountNumber || DEFAULT_COMPANY_SETTINGS.rtgsAccountNumber,
+    usdAccountNumber: settings.usdAccountNumber || DEFAULT_COMPANY_SETTINGS.usdAccountNumber,
     ecocashNumber: settings.ecocashNumber || DEFAULT_COMPANY_SETTINGS.ecocashNumber,
     currency: settings.currency || DEFAULT_COMPANY_SETTINGS.currency,
     salesType: settings.salesType || DEFAULT_COMPANY_SETTINGS.salesType,

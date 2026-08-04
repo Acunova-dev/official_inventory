@@ -133,6 +133,8 @@ interface CompanySettings {
   bankName?: string;
   accountName?: string;
   accountNumber?: string;
+  rtgsAccountNumber?: string;
+  usdAccountNumber?: string;
   ecocashNumber?: string;
   currency?: string;
   salesType?: string;
@@ -442,6 +444,8 @@ const initialDatabase: Database = {
     bankName: "Stanbic Bank Bulawayo",
     accountName: "Shield Hardware Pvt Ltd",
     accountNumber: "9140001827461",
+    rtgsAccountNumber: "0112458920101",
+    usdAccountNumber: "9140001827461",
     ecocashNumber: "*151*2*2*123456# / +263 773 360 800",
     currency: "USD",
     salesType: "ALL",

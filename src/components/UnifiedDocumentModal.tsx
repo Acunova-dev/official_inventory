@@ -103,6 +103,8 @@ export const UnifiedDocumentModal: React.FC<UnifiedDocumentModalProps> = ({
   const bankName = companySettings.bankName;
   const accountName = companySettings.accountName;
   const accountNumber = companySettings.accountNumber;
+  const rtgsAccountNumber = companySettings.rtgsAccountNumber || companySettings.accountNumber;
+  const usdAccountNumber = companySettings.usdAccountNumber || companySettings.accountNumber;
   const ecocashNumber = companySettings.ecocashNumber;
   const footerTerms = companySettings.footerTerms;
 
@@ -494,63 +496,73 @@ export const UnifiedDocumentModal: React.FC<UnifiedDocumentModalProps> = ({
 
               {/* Party Details & Metadata Box Grid */}
               <div className="grid grid-cols-2 gap-6 bg-slate-50/80 rounded-xl p-4 border border-slate-200/80 text-xs font-mono">
-                {/* Left: Party Info */}
-                <div className="space-y-1">
+                {/* Left: Party Info - wrapped and contained */}
+                <div className="space-y-1 min-w-0 overflow-hidden break-words">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{normDoc.partyLabel}</p>
-                  <h4 className="font-black text-sm text-slate-900 uppercase tracking-tight">{normDoc.partyName}</h4>
-                  {normDoc.partyAddress && <p className="text-slate-600">{normDoc.partyAddress}</p>}
-                  {normDoc.partyPhone && <p className="text-slate-600"><span className="font-semibold text-slate-800">Phone:</span> {normDoc.partyPhone}</p>}
-                  {normDoc.partyEmail && <p className="text-slate-600"><span className="font-semibold text-slate-800">Email:</span> {normDoc.partyEmail}</p>}
+                  <h4 className="font-black text-sm text-slate-900 uppercase tracking-tight break-words">{normDoc.partyName}</h4>
+                  {normDoc.partyAddress && (
+                    <p className="text-slate-600 break-words whitespace-normal leading-relaxed">{normDoc.partyAddress}</p>
+                  )}
+                  {normDoc.partyPhone && (
+                    <p className="text-slate-600 break-all"><span className="font-semibold text-slate-800">Phone:</span> {normDoc.partyPhone}</p>
+                  )}
+                  {normDoc.partyEmail && (
+                    <p className="text-slate-600 break-all"><span className="font-semibold text-slate-800">Email:</span> {normDoc.partyEmail}</p>
+                  )}
                 </div>
 
                 {/* Right: Metadata Grid */}
-                <div className="space-y-1.5 border-l border-slate-200/80 pl-6">
+                <div className="space-y-1.5 border-l border-slate-200/80 pl-6 min-w-0">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">DOCUMENT METADATA</p>
                   <div className="grid grid-cols-1 gap-1 text-[11px]">
                     {normDoc.metaFields.map((field, idx) => (
-                      <div key={idx} className="flex justify-between items-center border-b border-slate-200/50 pb-0.5">
-                        <span className="text-slate-500 font-medium">{field.label}:</span>
-                        <span className="font-bold text-slate-900">{field.value}</span>
+                      <div key={idx} className="flex justify-between items-center border-b border-slate-200/50 pb-0.5 gap-2">
+                        <span className="text-slate-500 font-medium whitespace-nowrap">{field.label}:</span>
+                        <span className="font-bold text-slate-900 text-right truncate">{field.value}</span>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
 
-              {/* Itemized Table */}
+              {/* Itemized Table - Strict column widths and text wrapping */}
               <div className="space-y-2">
                 <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-                  <table className="w-full text-xs font-mono text-left border-collapse">
+                  <table className="w-full table-fixed text-xs font-mono text-left border-collapse">
                     <thead>
                       <tr className="bg-slate-900 text-white font-bold uppercase text-[10px] tracking-wider">
                         <th className="py-2.5 px-3 w-10 text-center border-r border-slate-800">#</th>
                         <th className="py-2.5 px-3 border-r border-slate-800">Item Description</th>
                         {normDoc.lines.some(l => l.codeOrSku) && (
-                          <th className="py-2.5 px-3 w-28 border-r border-slate-800">SKU / Code</th>
+                          <th className="py-2.5 px-3 w-32 border-r border-slate-800">SKU / Code</th>
                         )}
                         <th className="py-2.5 px-3 w-16 text-center border-r border-slate-800">Qty</th>
                         <th className="py-2.5 px-3 w-28 text-right border-r border-slate-800">Unit ({normDoc.currency})</th>
-                        <th className="py-2.5 px-3 w-32 text-right">Total ({normDoc.currency})</th>
+                        <th className="py-2.5 px-3 w-32 text-right">EXT ({normDoc.currency})</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 bg-white">
                       {normDoc.lines.map((line, idx) => (
                         <tr key={line.id || idx} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                          <td className="py-2.5 px-3 text-center text-slate-500 font-medium border-r border-slate-200/60">{idx + 1}</td>
-                          <td className="py-2.5 px-3 border-r border-slate-200/60 font-medium text-slate-900">
-                            <div>{line.description}</div>
+                          <td className="py-2.5 px-3 text-center text-slate-500 font-medium border-r border-slate-200/60 align-top">{idx + 1}</td>
+                          <td className="py-2.5 px-3 border-r border-slate-200/60 font-medium text-slate-900 align-top break-words whitespace-normal">
+                            <div className="break-words">{line.description}</div>
                             {line.remarks && (
-                              <div className="text-[10px] text-slate-500 italic pt-0.5">{line.remarks}</div>
+                              <div className="text-[10px] text-slate-500 italic pt-0.5 break-words">{line.remarks}</div>
                             )}
                           </td>
                           {normDoc.lines.some(l => l.codeOrSku) && (
-                            <td className="py-2.5 px-3 font-mono text-slate-600 border-r border-slate-200/60">{line.codeOrSku || "-"}</td>
+                            <td className="py-2.5 px-3 font-mono text-slate-600 border-r border-slate-200/60 align-top break-all whitespace-normal">
+                              {line.codeOrSku || "-"}
+                            </td>
                           )}
-                          <td className="py-2.5 px-3 text-center font-bold text-slate-800 border-r border-slate-200/60">{line.quantity}</td>
-                          <td className="py-2.5 px-3 text-right text-slate-700 border-r border-slate-200/60 font-mono">
+                          <td className="py-2.5 px-3 text-center font-bold text-slate-800 border-r border-slate-200/60 align-top whitespace-nowrap">
+                            {line.quantity}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-slate-700 border-r border-slate-200/60 font-mono align-top whitespace-nowrap">
                             {line.unitCostOrPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-black text-slate-900 font-mono">
+                          <td className="py-2.5 px-3 text-right font-black text-slate-900 font-mono align-top whitespace-nowrap">
                             {line.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                         </tr>
@@ -568,11 +580,14 @@ export const UnifiedDocumentModal: React.FC<UnifiedDocumentModalProps> = ({
                     <Building2 size={14} className="text-blue-600" />
                     <span>OFFICIAL BANKING & PAYMENT DETAILS</span>
                   </p>
-                  <div className="space-y-1 text-slate-700">
-                    <p><span className="font-bold text-slate-900">Bank Name:</span> {bankName}</p>
+                  <div className="space-y-1 text-slate-700 font-mono text-[11px]">
+                    <p><span className="font-bold text-slate-900">Bank:</span> {bankName}</p>
                     <p><span className="font-bold text-slate-900">Account Name:</span> {accountName}</p>
-                    <p><span className="font-bold text-slate-900">Account Number:</span> {accountNumber}</p>
-                    <p><span className="font-bold text-slate-900">Settlement Currency:</span> {normDoc.currency}</p>
+                    <p><span className="font-bold text-slate-900">RTGS:</span> <span className="font-bold text-slate-900">{rtgsAccountNumber}</span></p>
+                    <p><span className="font-bold text-slate-900">USD:</span> <span className="font-bold text-slate-900">{usdAccountNumber}</span></p>
+                    {ecocashNumber && (
+                      <p><span className="font-bold text-slate-900">EcoCash Number:</span> <span className="font-bold text-slate-900">{ecocashNumber}</span></p>
+                    )}
                   </div>
                   {normDoc.notes && (
                     <div className="pt-2 border-t border-slate-200/80 text-[10px] text-slate-600">

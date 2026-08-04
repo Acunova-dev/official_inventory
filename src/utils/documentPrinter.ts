@@ -620,6 +620,7 @@ export async function generatePdfBlob(
 
   // Standard A4 / A5 / Letter format
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   let y = 15;
 
   // Header Color Bar
@@ -689,88 +690,163 @@ export async function generatePdfBlob(
   doc.line(15, y, pageWidth - 15, y);
   y += 6;
 
-  // Customer / Party Box
-  const boxHeight = 26;
+  // Customer / Party Box & Metadata Box
+  const partyBoxWidth = (pageWidth - 36) / 2;
+  const leftX = 15;
+  const metaX = leftX + partyBoxWidth + 6;
+
+  // Split and wrap party address cleanly to prevent overflowing into adjacent columns
+  const addressLines: string[] = normDoc.partyAddress 
+    ? doc.splitTextToSize(normDoc.partyAddress, partyBoxWidth - 8)
+    : [];
+  const maxAddressLines = addressLines.slice(0, 3);
+  
+  // Calculate dynamic box height for party and meta fields
+  const dynamicBoxHeight = Math.max(26, 14 + (maxAddressLines.length * 3.6) + (normDoc.partyPhone ? 3.6 : 0) + (normDoc.partyEmail ? 3.6 : 0) + 2);
+  const boxHeight = Math.min(dynamicBoxHeight, 38);
+
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(15, y, (pageWidth - 36) / 2, boxHeight, 2, 2, "F");
+  doc.roundedRect(leftX, y, partyBoxWidth, boxHeight, 2, 2, "F");
   doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(15, y, (pageWidth - 36) / 2, boxHeight, 2, 2, "S");
+  doc.roundedRect(leftX, y, partyBoxWidth, boxHeight, 2, 2, "S");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
-  doc.text(normDoc.partyLabel, 18, y + 5);
+  doc.text(normDoc.partyLabel, leftX + 3, y + 4.5);
   doc.setFontSize(9.5);
   doc.setTextColor(15, 23, 42);
-  doc.text(normDoc.partyName || "N/A", 18, y + 10);
+  const partyNameLines = doc.splitTextToSize(normDoc.partyName || "N/A", partyBoxWidth - 6);
+  doc.text(partyNameLines[0] || "N/A", leftX + 3, y + 9);
   
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(71, 85, 105);
-  let partyY = y + 14.5;
-  if (normDoc.partyAddress) {
-    doc.text(normDoc.partyAddress.substring(0, 40), 18, partyY);
-    partyY += 3.8;
+  let partyY = y + 13;
+  
+  maxAddressLines.forEach(lineText => {
+    doc.text(lineText, leftX + 3, partyY);
+    partyY += 3.6;
+  });
+  
+  if (normDoc.partyPhone && partyY < y + boxHeight - 2) {
+    doc.text(`Phone: ${normDoc.partyPhone}`.substring(0, 35), leftX + 3, partyY);
+    partyY += 3.6;
   }
-  if (normDoc.partyPhone) {
-    doc.text(`Phone: ${normDoc.partyPhone}`, 18, partyY);
-    partyY += 3.8;
-  }
-  if (normDoc.partyEmail) {
-    doc.text(`Email: ${normDoc.partyEmail}`, 18, partyY);
+  if (normDoc.partyEmail && partyY < y + boxHeight - 2) {
+    doc.text(`Email: ${normDoc.partyEmail}`.substring(0, 35), leftX + 3, partyY);
   }
 
   // Meta Fields Box (Right)
-  const metaX = 15 + (pageWidth - 36) / 2 + 6;
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(metaX, y, (pageWidth - 36) / 2, boxHeight, 2, 2, "F");
-  doc.roundedRect(metaX, y, (pageWidth - 36) / 2, boxHeight, 2, 2, "S");
+  doc.roundedRect(metaX, y, partyBoxWidth, boxHeight, 2, 2, "F");
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(metaX, y, partyBoxWidth, boxHeight, 2, 2, "S");
 
   let metaY = y + 5;
-  normDoc.metaFields.slice(0, 3).forEach(meta => {
+  normDoc.metaFields.slice(0, 4).forEach(meta => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
     doc.text(`${meta.label}:`, metaX + 3, metaY);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(15, 23, 42);
-    doc.text(String(meta.value), metaX + 40, metaY);
-    metaY += 5;
+    const metaValTrunc = String(meta.value).substring(0, 24);
+    doc.text(metaValTrunc, metaX + partyBoxWidth - 4, metaY, { align: "right" });
+    metaY += 5.2;
   });
 
-  y += 28;
+  y += boxHeight + 4;
 
   // Table Header
-  doc.setFillColor(rgb.r, rgb.g, rgb.b);
-  doc.rect(15, y, pageWidth - 30, 7, "F");
+  const drawTableHeader = (atY: number) => {
+    doc.setFillColor(rgb.r, rgb.g, rgb.b);
+    doc.rect(15, atY, pageWidth - 30, 7, "F");
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.setTextColor(255, 255, 255);
-  doc.text("CODE", 18, y + 5);
-  doc.text("DESCRIPTION", 42, y + 5);
-  doc.text("QTY", pageWidth - 80, y + 5, { align: "right" });
-  doc.text("PRICE", pageWidth - 50, y + 5, { align: "right" });
-  doc.text("TOTAL", pageWidth - 18, y + 5, { align: "right" });
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(255, 255, 255);
+    doc.text("CODE", 18, atY + 5);
+    doc.text("DESCRIPTION", 46, atY + 5);
+    doc.text("QTY", 132, atY + 5, { align: "right" });
+    doc.text(`PRICE (${normDoc.currency})`, 162, atY + 5, { align: "right" });
+    doc.text(`EXT (${normDoc.currency})`, 192, atY + 5, { align: "right" });
+  };
 
+  drawTableHeader(y);
   y += 7;
 
-  // Table Lines
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(15, 23, 42);
+  // Table Lines with dynamic row height and column-bound text wrapping
+  const codeColWidth = 26;
+  const descColWidth = 68;
 
   normDoc.lines.forEach((line, idx) => {
+    const rawCode = line.codeOrSku || `ITEM-${idx + 1}`;
+    const codeLines = doc.splitTextToSize(rawCode, codeColWidth);
+
+    const rawDesc = line.description || "Line Item";
+    const descLines = doc.splitTextToSize(rawDesc, descColWidth);
+    const remarksLines = line.remarks ? doc.splitTextToSize(`Note: ${line.remarks}`, descColWidth) : [];
+
+    const maxLineCount = Math.max(codeLines.length, descLines.length + remarksLines.length, 1);
+    const rowHeight = Math.max(7, maxLineCount * 3.8 + 3.2);
+
+    // Multi-page check
+    if (y + rowHeight > pageHeight - 45) {
+      doc.addPage();
+      y = 15;
+      drawTableHeader(y);
+      y += 7;
+    }
+
     if (idx % 2 === 1) {
       doc.setFillColor(248, 250, 252);
-      doc.rect(15, y, pageWidth - 30, 7, "F");
+      doc.rect(15, y, pageWidth - 30, rowHeight, "F");
     }
-    doc.text(line.codeOrSku || `ITEM-${idx + 1}`, 18, y + 5);
-    doc.text(line.description.substring(0, 45), 42, y + 5);
-    doc.text(line.quantity.toString(), pageWidth - 80, y + 5, { align: "right" });
-    doc.text(line.unitCostOrPrice.toFixed(2), pageWidth - 50, y + 5, { align: "right" });
-    doc.text(line.total.toFixed(2), pageWidth - 18, y + 5, { align: "right" });
-    y += 7;
+
+    // Draw borders for clean row separation
+    doc.setDrawColor(241, 245, 249);
+    doc.setLineWidth(0.2);
+    doc.line(15, y + rowHeight, pageWidth - 15, y + rowHeight);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(15, 23, 42);
+
+    // Render wrapped Item Code
+    codeLines.forEach((cLine: string, cIdx: number) => {
+      doc.text(cLine, 18, y + 4.5 + (cIdx * 3.6));
+    });
+
+    // Render wrapped Description
+    let curDescY = y + 4.5;
+    descLines.forEach((dLine: string) => {
+      doc.text(dLine, 46, curDescY);
+      curDescY += 3.6;
+    });
+
+    // Render remarks if any
+    if (remarksLines.length > 0) {
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      remarksLines.forEach((rLine: string) => {
+        doc.text(rLine, 46, curDescY);
+        curDescY += 3.2;
+      });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(15, 23, 42);
+    }
+
+    // Render numerical columns aligned strictly inside their boundaries
+    doc.text(line.quantity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }), 132, y + 4.5, { align: "right" });
+    doc.text(line.unitCostOrPrice.toFixed(2), 162, y + 4.5, { align: "right" });
+    doc.setFont("helvetica", "bold");
+    doc.text(line.total.toFixed(2), 192, y + 4.5, { align: "right" });
+    doc.setFont("helvetica", "normal");
+
+    y += rowHeight;
   });
 
   y += 4;
@@ -779,22 +855,26 @@ export async function generatePdfBlob(
   y += 6;
 
   // Bank Info & Summary
-  const summaryWidth = 70;
+  const summaryWidth = 72;
   const summaryX = pageWidth - 15 - summaryWidth;
 
-  // Banking Details (Left)
+  // Banking Details (Left) - Structured with RTGS, USD, and EcoCash Number
+  const rtgsAcc = settings.rtgsAccountNumber || settings.accountNumber || "0112458920101";
+  const usdAcc = settings.usdAccountNumber || settings.accountNumber || "9140001827461";
+
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
+  doc.setFontSize(8.5);
   doc.setTextColor(71, 85, 105);
   doc.text("BANK SETTLEMENT DETAILS", 15, y);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(15, 23, 42);
-  doc.text(`Bank: ${settings.bankName}`, 15, y + 4);
-  doc.text(`Account Name: ${settings.accountName}`, 15, y + 8);
-  doc.text(`Account #: ${settings.accountNumber}`, 15, y + 12);
+  doc.text(`Bank: ${settings.bankName || "Stanbic Bank Bulawayo"}`, 15, y + 4.5);
+  doc.text(`Account Name: ${settings.accountName || settings.companyName}`, 15, y + 8.5);
+  doc.text(`RTGS: ${rtgsAcc}`, 15, y + 12.5);
+  doc.text(`USD: ${usdAcc}`, 15, y + 16.5);
   if (settings.ecocashNumber) {
-    doc.text(`EcoCash Code: ${settings.ecocashNumber}`, 15, y + 16);
+    doc.text(`EcoCash Number: ${settings.ecocashNumber}`, 15, y + 20.5);
   }
 
   // Totals Summary (Right)

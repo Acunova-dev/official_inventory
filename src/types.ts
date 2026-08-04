@@ -358,6 +358,8 @@ export interface CompanySettings {
   bankName?: string;
   accountName?: string;
   accountNumber?: string;
+  rtgsAccountNumber?: string;
+  usdAccountNumber?: string;
   ecocashNumber?: string;
   currency?: string;
   salesType?: string;

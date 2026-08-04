@@ -480,11 +480,23 @@ export const Settings: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Bank Account Number</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">RTGS Account Number</label>
                   <input
                     type="text"
-                    name="accountNumber"
-                    value={formState.accountNumber || ""}
+                    name="rtgsAccountNumber"
+                    value={formState.rtgsAccountNumber || formState.accountNumber || ""}
+                    onChange={handleInputChange}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    placeholder="e.g. 0112458920101"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">USD Account Number</label>
+                  <input
+                    type="text"
+                    name="usdAccountNumber"
+                    value={formState.usdAccountNumber || formState.accountNumber || ""}
                     onChange={handleInputChange}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                     placeholder="e.g. 9140001827461"
@@ -492,7 +504,7 @@ export const Settings: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">EcoCash Merchant Code / Number</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">EcoCash Number</label>
                   <input
                     type="text"
                     name="ecocashNumber"
@@ -659,31 +671,31 @@ export const Settings: React.FC = () => {
                 {/* Two side-by-side Rounded Boxes */}
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   {/* Customer Box */}
-                  <div className="border border-amber-800/60 rounded-xl p-3 space-y-1 font-mono text-[10px] text-slate-800">
+                  <div className="border border-amber-800/60 rounded-xl p-3 space-y-1 font-mono text-[10px] text-slate-800 min-w-0 overflow-hidden break-words">
                     <p><span className="text-slate-500 font-bold">Customer:</span> 1000</p>
-                    <p className="font-bold text-slate-950">MR T. SIALUMBA</p>
-                    <p><span className="text-slate-500 font-bold">Mobile:</span> 077 493 8581</p>
-                    <p><span className="text-slate-500 font-bold">VAT No:</span> -</p>
+                    <p className="font-bold text-slate-950 break-words">MR T. SIALUMBA</p>
+                    <p className="break-words leading-relaxed"><span className="text-slate-500 font-bold">Address:</span> Stand 4022 Kelvin North, Bulawayo</p>
+                    <p className="break-all"><span className="text-slate-500 font-bold">Mobile:</span> 077 493 8581</p>
                   </div>
 
                   {/* Quotation Metadata Box */}
-                  <div className="space-y-2">
+                  <div className="space-y-2 min-w-0">
                     <div className="border border-amber-800/60 rounded-xl p-3 space-y-1 font-mono text-[10px] text-slate-800">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-bold">Quotation No:</span>
-                        <span className="font-bold text-slate-950">SHW6342</span>
+                      <div className="flex justify-between gap-1">
+                        <span className="text-slate-500 font-bold whitespace-nowrap">Quotation No:</span>
+                        <span className="font-bold text-slate-950 truncate">SHW6342</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-bold">Quotation Date:</span>
+                      <div className="flex justify-between gap-1">
+                        <span className="text-slate-500 font-bold whitespace-nowrap">Quotation Date:</span>
                         <span>25/06/2026</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-bold">Sales Type:</span>
+                      <div className="flex justify-between gap-1">
+                        <span className="text-slate-500 font-bold whitespace-nowrap">Sales Type:</span>
                         <span>{formState.salesType || "ALL"}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-bold">Done By:</span>
-                        <span>{formState.doneBy || "LMAKONO"}</span>
+                      <div className="flex justify-between gap-1">
+                        <span className="text-slate-500 font-bold whitespace-nowrap">Done By:</span>
+                        <span className="font-bold">{formState.doneBy || "LMAKONO"}</span>
                       </div>
                     </div>
 
@@ -696,39 +708,50 @@ export const Settings: React.FC = () => {
 
                 {/* Table Preview */}
                 <div className="pt-2">
-                  <table className="w-full text-left border-collapse font-mono text-[10px]">
+                  <table className="w-full table-fixed text-left border-collapse font-mono text-[10px]">
                     <thead>
                       <tr className="border-t border-b border-slate-900 text-slate-800 font-bold">
-                        <th className="py-1">Item Code</th>
+                        <th className="py-1 w-16">Item Code</th>
                         <th className="py-1">Item Description</th>
-                        <th className="py-1 text-center">Quantity</th>
-                        <th className="py-1 text-right">Price</th>
-                        <th className="py-1 text-right">Total</th>
+                        <th className="py-1 w-12 text-center">Qty</th>
+                        <th className="py-1 w-14 text-right">Price</th>
+                        <th className="py-1 w-14 text-right">EXT</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-900">
                       <tr>
-                        <td className="py-1">2253</td>
-                        <td className="py-1 font-sans font-semibold">500ML WOOD GLUE</td>
-                        <td className="py-1 text-center">1.00</td>
-                        <td className="py-1 text-right">2.00</td>
-                        <td className="py-1 text-right font-bold">2.00</td>
+                        <td className="py-1 align-top break-all">2253</td>
+                        <td className="py-1 font-sans font-semibold align-top break-words">500ML WOOD GLUE</td>
+                        <td className="py-1 text-center align-top whitespace-nowrap">1.00</td>
+                        <td className="py-1 text-right align-top whitespace-nowrap">2.00</td>
+                        <td className="py-1 text-right font-bold align-top whitespace-nowrap">2.00</td>
                       </tr>
                       <tr>
-                        <td className="py-1">2885</td>
-                        <td className="py-1 font-sans font-semibold">BLACK SPRAY PAINT</td>
-                        <td className="py-1 text-center">3.00</td>
-                        <td className="py-1 text-right">2.00</td>
-                        <td className="py-1 text-right font-bold">6.00</td>
+                        <td className="py-1 align-top break-all">2885</td>
+                        <td className="py-1 font-sans font-semibold align-top break-words">BLACK SPRAY PAINT</td>
+                        <td className="py-1 text-center align-top whitespace-nowrap">3.00</td>
+                        <td className="py-1 text-right align-top whitespace-nowrap">2.00</td>
+                        <td className="py-1 text-right font-bold align-top whitespace-nowrap">6.00</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
 
+                {/* Banking Settlement Details Preview */}
+                <div className="pt-2 border-t border-slate-200 text-[10px] font-mono text-slate-800 space-y-0.5">
+                  <p><span className="text-slate-500 font-bold">Bank:</span> {formState.bankName || "Stanbic Bank Bulawayo"}</p>
+                  <p><span className="text-slate-500 font-bold">Account Name:</span> {formState.accountName || "Shield Hardware Pvt Ltd"}</p>
+                  <p><span className="text-slate-500 font-bold">RTGS:</span> <span className="font-bold text-slate-950">{formState.rtgsAccountNumber || formState.accountNumber || "0112458920101"}</span></p>
+                  <p><span className="text-slate-500 font-bold">USD:</span> <span className="font-bold text-slate-950">{formState.usdAccountNumber || formState.accountNumber || "9140001827461"}</span></p>
+                  {formState.ecocashNumber && (
+                    <p><span className="text-slate-500 font-bold">EcoCash Number:</span> <span className="font-bold text-slate-950">{formState.ecocashNumber}</span></p>
+                  )}
+                </div>
+
                 {/* Bottom Footer Band */}
                 <div className="pt-2 border-t border-slate-300 flex justify-between items-center font-mono text-[11px] font-bold">
                   <span className="text-slate-600 uppercase">{formState.footerTerms || "PRICES QUOTED IN"}</span>
-                  <span className="text-slate-950 font-black text-xs">{formState.currency || "USD"} DOLLAR 15.00</span>
+                  <span className="text-slate-950 font-black text-xs">{formState.currency || "USD"} DOLLAR 8.00</span>
                 </div>
 
               </div>

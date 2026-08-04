@@ -65,6 +65,8 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
   const bankName = companySettings.bankName;
   const accountName = companySettings.accountName;
   const accountNumber = companySettings.accountNumber;
+  const rtgsAccountNumber = companySettings.rtgsAccountNumber || companySettings.accountNumber || "0112458920101";
+  const usdAccountNumber = companySettings.usdAccountNumber || companySettings.accountNumber || "9140001827461";
   const ecocashNumber = companySettings.ecocashNumber;
   const currency = companySettings.currency;
   const salesType = companySettings.salesType;
@@ -267,48 +269,48 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             
             {/* Customer Box */}
-            <div className="border border-amber-900/40 rounded-xl p-3.5 space-y-1 font-mono text-xs text-slate-900 bg-amber-50/10">
-              <div className="flex gap-2">
-                <span className="text-slate-500 font-bold w-20">Customer:</span>
-                <span className="font-extrabold text-slate-950">{customerName || "Valued Customer"}</span>
+            <div className="border border-amber-900/40 rounded-xl p-3.5 space-y-1 font-mono text-xs text-slate-900 bg-amber-50/10 min-w-0 overflow-hidden break-words">
+              <div className="flex gap-2 min-w-0">
+                <span className="text-slate-500 font-bold w-20 shrink-0">Customer:</span>
+                <span className="font-extrabold text-slate-950 break-words">{customerName || "Valued Customer"}</span>
               </div>
               {customerAddress && (
-                <div className="flex gap-2">
-                  <span className="text-slate-500 font-bold w-20">Address:</span>
-                  <span>{customerAddress}</span>
+                <div className="flex gap-2 min-w-0">
+                  <span className="text-slate-500 font-bold w-20 shrink-0">Address:</span>
+                  <span className="break-words whitespace-normal leading-relaxed">{customerAddress}</span>
                 </div>
               )}
               {customerPhone && (
-                <div className="flex gap-2">
-                  <span className="text-slate-500 font-bold w-20">Phone:</span>
-                  <span>{customerPhone}</span>
+                <div className="flex gap-2 min-w-0">
+                  <span className="text-slate-500 font-bold w-20 shrink-0">Phone:</span>
+                  <span className="break-all">{customerPhone}</span>
                 </div>
               )}
               {customerEmail && (
-                <div className="flex gap-2">
-                  <span className="text-slate-500 font-bold w-20">Email:</span>
-                  <span>{customerEmail}</span>
+                <div className="flex gap-2 min-w-0">
+                  <span className="text-slate-500 font-bold w-20 shrink-0">Email:</span>
+                  <span className="break-all">{customerEmail}</span>
                 </div>
               )}
             </div>
 
             {/* Document Metadata Box */}
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <div className="border border-amber-900/40 rounded-xl p-3.5 space-y-1 font-mono text-xs text-slate-900 bg-amber-50/10">
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-bold">{isQuotation ? "Quotation No:" : "Receipt No:"}</span>
-                  <span className="font-extrabold text-slate-950">{docNumber}</span>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500 font-bold whitespace-nowrap">{isQuotation ? "Quotation No:" : "Receipt No:"}</span>
+                  <span className="font-extrabold text-slate-950 truncate">{docNumber}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-bold">Date:</span>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500 font-bold whitespace-nowrap">Date:</span>
                   <span>{date}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-bold">Sales Type:</span>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500 font-bold whitespace-nowrap">Sales Type:</span>
                   <span>{salesType}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500 font-bold">Done By:</span>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500 font-bold whitespace-nowrap">Done By:</span>
                   <span className="font-bold">{doneBy}</span>
                 </div>
               </div>
@@ -333,17 +335,17 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
             </div>
           )}
 
-          {/* Line Items Table */}
+          {/* Line Items Table - Fixed width and dynamic text wrapping */}
           <div className="pt-2">
-            <table className="w-full text-left border-collapse font-mono text-xs">
+            <table className="w-full table-fixed text-left border-collapse font-mono text-xs">
               <thead>
                 <tr className="border-t-2 border-b-2 border-slate-900 text-slate-900 font-extrabold">
-                  <th className="py-2 pr-2">Item Code</th>
+                  <th className="py-2 pr-2 w-28">Item Code</th>
                   <th className="py-2 px-2">Item Description</th>
-                  <th className="py-2 px-2 text-center">Quantity</th>
-                  <th className="py-2 px-2 text-right">Price (Incl)</th>
-                  <th className="py-2 px-2 text-right">Tax</th>
-                  <th className="py-2 pl-2 text-right">Total (Incl)</th>
+                  <th className="py-2 px-2 w-20 text-center">Quantity</th>
+                  <th className="py-2 px-2 w-24 text-right">Price (Incl)</th>
+                  <th className="py-2 px-2 w-20 text-right">Tax</th>
+                  <th className="py-2 pl-2 w-28 text-right">EXT (Incl)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-900">
@@ -352,14 +354,14 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
                   const itemCode = `ITEM-${1000 + index}`;
                   return (
                     <tr key={index} className="hover:bg-slate-50">
-                      <td className="py-2 pr-2 text-slate-500 font-mono text-[11px]">{itemCode}</td>
-                      <td className="py-2 px-2 font-sans font-bold text-slate-900 uppercase text-[11px]">
+                      <td className="py-2 pr-2 text-slate-500 font-mono text-[11px] align-top break-all whitespace-normal">{itemCode}</td>
+                      <td className="py-2 px-2 font-sans font-bold text-slate-900 uppercase text-[11px] align-top break-words whitespace-normal">
                         {line.productName}
                       </td>
-                      <td className="py-2 px-2 text-center font-bold">{line.quantity.toFixed(2)}</td>
-                      <td className="py-2 px-2 text-right">{line.unitPrice.toFixed(2)}</td>
-                      <td className="py-2 px-2 text-right text-slate-600">{lineTax.toFixed(2)}</td>
-                      <td className="py-2 pl-2 text-right font-bold text-slate-950">
+                      <td className="py-2 px-2 text-center font-bold align-top whitespace-nowrap">{line.quantity.toFixed(2)}</td>
+                      <td className="py-2 px-2 text-right align-top whitespace-nowrap">{line.unitPrice.toFixed(2)}</td>
+                      <td className="py-2 px-2 text-right text-slate-600 align-top whitespace-nowrap">{lineTax.toFixed(2)}</td>
+                      <td className="py-2 pl-2 text-right font-bold text-slate-950 align-top whitespace-nowrap">
                         {line.totalPrice.toFixed(2)}
                       </td>
                     </tr>
@@ -380,23 +382,28 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
 
             {/* Payment & Settlement Details Box */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 text-[11px] text-slate-800 border-t border-slate-200">
-              <div className="space-y-1">
+              <div className="space-y-1 font-mono">
                 <p className="font-bold text-slate-900 uppercase text-xs flex items-center gap-1">
                   <Building2 size={13} className="text-blue-700" /> Bank Settlement Details
                 </p>
                 <p><span className="text-slate-500 font-bold">Bank:</span> {bankName}</p>
                 <p><span className="text-slate-500 font-bold">Account Name:</span> {accountName}</p>
-                <p><span className="text-slate-500 font-bold">Account No:</span> <strong className="text-slate-900 font-mono">{accountNumber}</strong></p>
+                <p><span className="text-slate-500 font-bold">RTGS:</span> <strong className="text-slate-900 font-mono">{rtgsAccountNumber}</strong></p>
+                <p><span className="text-slate-500 font-bold">USD:</span> <strong className="text-slate-900 font-mono">{usdAccountNumber}</strong></p>
               </div>
 
-              <div className="space-y-1 sm:text-right">
+              <div className="space-y-1 font-mono sm:text-right">
                 <p className="font-bold text-slate-900 uppercase text-xs flex items-center sm:justify-end gap-1">
-                  EcoCash Mobile Merchant
+                  Mobile Merchant
                 </p>
-                <p><span className="text-slate-500 font-bold">Merchant / USSD Code:</span></p>
-                <p className="font-bold font-mono text-slate-950 text-xs bg-slate-100 px-2 py-0.5 rounded inline-block">
-                  {ecocashNumber}
-                </p>
+                {ecocashNumber && (
+                  <>
+                    <p><span className="text-slate-500 font-bold">EcoCash Number:</span></p>
+                    <p className="font-bold font-mono text-slate-950 text-xs bg-slate-100 px-2 py-0.5 rounded inline-block">
+                      {ecocashNumber}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
 
