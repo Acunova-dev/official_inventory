@@ -40,6 +40,7 @@
         "businessId": { "type": "string", "maxLength": 128 },
         "name": { "type": "string", "maxLength": 200 },
         "category": { "type": "string", "maxLength": 100 },
+        "categoryId": { "type": "string", "maxLength": 128 },
         "sku": { "type": "string", "maxLength": 64 },
         "barcode": { "type": "string", "maxLength": 64 },
         "brand": { "type": "string", "maxLength": 100 },
@@ -64,7 +65,10 @@
         "businessId": { "type": "string", "maxLength": 128 },
         "name": { "type": "string", "maxLength": 100 },
         "description": { "type": "string", "maxLength": 500 },
-        "createdAt": { "type": "string" }
+        "status": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "createdBy": { "type": "string", "maxLength": 128 }
       },
       "required": ["id", "businessId", "name"]
     },
@@ -170,6 +174,136 @@
       },
       "required": ["id", "businessId", "receiptNumber", "customerId", "total"]
     },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Sales invoice document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "invoiceNumber": { "type": "string", "maxLength": 64 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "date": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "subtotal": { "type": "number" },
+        "taxRate": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "discountRate": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "total": { "type": "number" },
+        "amountPaid": { "type": "number" },
+        "outstandingBalance": { "type": "number" },
+        "status": { "type": "string", "maxLength": 32 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "businessId", "invoiceNumber", "customerId", "total", "status"]
+    },
+    "CashBookEntry": {
+      "title": "CashBookEntry",
+      "description": "Cash transaction ledger entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string" },
+        "referenceDoc": { "type": "string", "maxLength": 128 },
+        "description": { "type": "string", "maxLength": 300 },
+        "debit": { "type": "number" },
+        "credit": { "type": "number" },
+        "runningBalance": { "type": "number" },
+        "category": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "businessId", "date", "referenceDoc"]
+    },
+    "BankAccount": {
+      "title": "BankAccount",
+      "description": "Bank account record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "accountName": { "type": "string", "maxLength": 150 },
+        "accountNumber": { "type": "string", "maxLength": 100 },
+        "bankName": { "type": "string", "maxLength": 150 },
+        "branch": { "type": "string", "maxLength": 150 },
+        "currency": { "type": "string", "maxLength": 10 },
+        "initialBalance": { "type": "number" },
+        "currentBalance": { "type": "number" },
+        "status": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["id", "businessId", "accountName", "accountNumber", "bankName"]
+    },
+    "BankTransaction": {
+      "title": "BankTransaction",
+      "description": "Bank ledger transaction record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "bankAccountId": { "type": "string", "maxLength": 128 },
+        "bankAccountName": { "type": "string", "maxLength": 150 },
+        "date": { "type": "string" },
+        "referenceDoc": { "type": "string", "maxLength": 128 },
+        "description": { "type": "string", "maxLength": 300 },
+        "debit": { "type": "number" },
+        "credit": { "type": "number" },
+        "runningBalance": { "type": "number" },
+        "transactionType": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "businessId", "bankAccountId", "date"]
+    },
+    "PaymentVoucher": {
+      "title": "PaymentVoucher",
+      "description": "Vendor payment disbursement voucher",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "voucherNumber": { "type": "string", "maxLength": 64 },
+        "supplierId": { "type": "string", "maxLength": 128 },
+        "supplierName": { "type": "string", "maxLength": 150 },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "paymentMethod": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["id", "businessId", "voucherNumber", "supplierId", "amount"]
+    },
+    "PurchaseOrder": {
+      "title": "PurchaseOrder",
+      "description": "Procurement purchase order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "poNumber": { "type": "string", "maxLength": 64 },
+        "supplierId": { "type": "string", "maxLength": 128 },
+        "supplierName": { "type": "string", "maxLength": 150 },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string", "maxLength": 32 },
+        "date": { "type": "string" }
+      },
+      "required": ["id", "businessId", "poNumber", "supplierId", "totalAmount", "status"]
+    },
+    "GoodsReceivedNote": {
+      "title": "GoodsReceivedNote",
+      "description": "Warehouse goods received note",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "grnNumber": { "type": "string", "maxLength": 64 },
+        "poId": { "type": "string", "maxLength": 128 },
+        "poNumber": { "type": "string", "maxLength": 64 },
+        "supplierId": { "type": "string", "maxLength": 128 },
+        "supplierName": { "type": "string", "maxLength": 150 },
+        "date": { "type": "string" },
+        "status": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["id", "businessId", "grnNumber", "poId", "supplierId", "status"]
+    },
     "SystemLog": {
       "title": "SystemLog",
       "description": "Audit system log",
@@ -206,6 +340,16 @@
         "currency": { "type": "string", "maxLength": 10 }
       },
       "required": ["businessId", "companyName"]
+    },
+    "Counter": {
+      "title": "Counter",
+      "description": "Sequential reference numbering counter",
+      "type": "object",
+      "properties": {
+        "currentCount": { "type": "number" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["currentCount"]
     }
   },
   "firestore": {
@@ -249,6 +393,34 @@
       "schema": "Receipt",
       "description": "Receipt payments"
     },
+    "/businesses/{businessId}/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Customer invoices"
+    },
+    "/businesses/{businessId}/cashBook/{entryId}": {
+      "schema": "CashBookEntry",
+      "description": "Cash book records"
+    },
+    "/businesses/{businessId}/bankAccounts/{accountId}": {
+      "schema": "BankAccount",
+      "description": "Bank account entities"
+    },
+    "/businesses/{businessId}/bankTransactions/{txnId}": {
+      "schema": "BankTransaction",
+      "description": "Bank ledger transactions"
+    },
+    "/businesses/{businessId}/paymentVouchers/{voucherId}": {
+      "schema": "PaymentVoucher",
+      "description": "Payment disbursement vouchers"
+    },
+    "/businesses/{businessId}/purchaseOrders/{orderId}": {
+      "schema": "PurchaseOrder",
+      "description": "Purchase orders"
+    },
+    "/businesses/{businessId}/goodsReceivedNotes/{grnId}": {
+      "schema": "GoodsReceivedNote",
+      "description": "Goods received notes"
+    },
     "/businesses/{businessId}/systemLogs/{logId}": {
       "schema": "SystemLog",
       "description": "System log events"
@@ -256,6 +428,10 @@
     "/businesses/{businessId}/settings/company": {
       "schema": "CompanySettings",
       "description": "Company setting profile"
+    },
+    "/businesses/{businessId}/counters/{counterId}": {
+      "schema": "Counter",
+      "description": "Sequential counters"
     }
   }
 }
