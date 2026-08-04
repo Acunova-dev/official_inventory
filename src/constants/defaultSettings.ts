@@ -23,7 +23,7 @@ export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   bankName: "POSB",
   accountName: "Acunova Pvt Ltd",
   accountNumber: "500009804419",
-  rtgsAccountNumber: "500009804436",
+  rtgsAccountNumber: "500009804419",
   usdAccountNumber: "500009804436",
   ecocashNumber: "+263 774 938 581",
   currency: "USD",
