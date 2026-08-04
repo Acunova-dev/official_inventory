@@ -28,7 +28,8 @@ import {
   AlertCircle,
   FileCheck2,
   FileHeart,
-  ScanLine
+  ScanLine,
+  Pencil
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { UnifiedDocumentModal } from "../components/UnifiedDocumentModal";
@@ -72,8 +73,9 @@ export const Quotations: React.FC = () => {
     }
   });
 
-  const [view, setView] = useState<"list" | "create" | "view">("list");
+  const [view, setView] = useState<"list" | "create" | "edit" | "view">("list");
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
+  const [editingQuote, setEditingQuote] = useState<Quotation | null>(null);
   const [isOcrModalOpen, setIsOcrModalOpen] = useState(false);
   
   // AI assist state
@@ -175,6 +177,45 @@ export const Quotations: React.FC = () => {
     }
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: QuotationFormValues }) => {
+      const isTaxEnabled = data.enableTax;
+      let effectiveTax = 0;
+      if (isTaxEnabled) {
+        let tr = data.taxRate || 0;
+        effectiveTax = tr > 1 ? tr / 100 : tr;
+      }
+      const selectedCust = customers.find(c => c.id === data.customerId);
+      return quotationService.update(id, {
+        customerId: data.customerId,
+        customerName: selectedCust?.name,
+        customerEmail: selectedCust?.email,
+        customerPhone: selectedCust?.phone,
+        customerAddress: selectedCust?.address,
+        items: data.items,
+        discountRate: data.discountRate,
+        taxRate: effectiveTax,
+        notes: data.notes,
+        status: data.status,
+      });
+    },
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["quotations"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-activity"] });
+      showToast(`Quotation #${updated.quotationNumber} updated successfully!`, "success");
+      setEditingQuote(null);
+      if (selectedQuoteId === updated.id) {
+        setView("view");
+      } else {
+        setView("list");
+      }
+    },
+    onError: (err: any) => {
+      showToast(err.response?.data?.error || err.message || "Failed to update quotation", "error");
+    }
+  });
+
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: Quotation["status"] }) => 
       quotationService.update(id, { status }),
@@ -222,14 +263,57 @@ export const Quotations: React.FC = () => {
     }
   });
 
+  const resetFormDefaults = () => {
+    setEditingQuote(null);
+    setValue("customerId", "");
+    setValue("discountRate", 0);
+    const isTaxOn = serverSettings?.enableVat ?? false;
+    const defaultRate = serverSettings?.taxRate !== undefined ? serverSettings.taxRate : 0;
+    setValue("enableTax", isTaxOn);
+    setValue("taxRate", defaultRate);
+    setValue("notes", "");
+    setValue("status", "Draft");
+    setValue("items", [{ productId: "", quantity: 1 }]);
+  };
+
+  const handleStartCreate = () => {
+    resetFormDefaults();
+    setView("create");
+  };
+
+  const handleEditQuote = (quote: Quotation) => {
+    if (quote.isConverted) {
+      showToast("This quotation has already been converted to an invoice and cannot be modified.", "info");
+      return;
+    }
+    setEditingQuote(quote);
+    setValue("customerId", quote.customerId || "");
+    setValue("discountRate", quote.discountRate || 0);
+    const hasTax = (quote.taxRate || 0) > 0;
+    setValue("enableTax", hasTax);
+    setValue("taxRate", (quote.taxRate || 0) > 1 ? quote.taxRate : Number(((quote.taxRate || 0) * 100).toFixed(2)));
+    setValue("notes", quote.notes || "");
+    setValue("status", quote.status || "Draft");
+
+    if (quote.lines && quote.lines.length > 0) {
+      setValue("items", quote.lines.map(line => ({
+        productId: line.productId || "",
+        quantity: line.quantity || 1
+      })));
+    } else {
+      setValue("items", [{ productId: "", quantity: 1 }]);
+    }
+    setView("edit");
+  };
+
   useEffect(() => {
-    if (serverSettings) {
+    if (serverSettings && !editingQuote) {
       const isTaxOn = serverSettings.enableVat ?? false;
       const defaultRate = serverSettings.taxRate !== undefined ? serverSettings.taxRate : 0;
       setValue("enableTax", isTaxOn);
       setValue("taxRate", defaultRate);
     }
-  }, [serverSettings, setValue]);
+  }, [serverSettings, setValue, editingQuote]);
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -240,6 +324,7 @@ export const Quotations: React.FC = () => {
 
   useEffect(() => {
     if (location.state?.importFromOcr && Array.isArray(location.state.items)) {
+      setEditingQuote(null);
       setView("create");
       const ocrItems = location.state.items;
       const formatted = ocrItems.map((item: any) => ({
@@ -251,8 +336,19 @@ export const Quotations: React.FC = () => {
         setValue("notes", `Imported from OCR document photo for: ${location.state.vendorOrCustomer}`);
       }
       showToast(`Loaded ${formatted.length} OCR extracted line items into quotation!`, "success");
+    } else if (location.state?.selectedQuoteId && quotations.length > 0) {
+      const q = quotations.find(item => item.id === location.state.selectedQuoteId);
+      if (q) {
+        setSelectedQuoteId(q.id);
+        setView("view");
+      }
+    } else if (location.state?.editQuoteId && quotations.length > 0) {
+      const q = quotations.find(item => item.id === location.state.editQuoteId);
+      if (q) {
+        handleEditQuote(q);
+      }
     }
-  }, [location.state, products]);
+  }, [location.state, products, quotations]);
 
   const formItems = watch("items");
   const formDiscountRate = watch("discountRate") || 0;
@@ -275,14 +371,16 @@ export const Quotations: React.FC = () => {
     }
     const cust = customers.find(c => c.id === formCustomerId);
     const draftQuote: Quotation = {
-      id: "DRAFT-TEMP",
-      quotationNumber: `QT-DRAFT-${Date.now().toString().slice(-4)}`,
+      id: editingQuote ? editingQuote.id : "DRAFT-TEMP",
+      quotationNumber: editingQuote ? editingQuote.quotationNumber : `QT-DRAFT-${Date.now().toString().slice(-4)}`,
       customerId: formCustomerId || "CUST-DRAFT",
-      customerName: cust?.name || "Draft Trade Partner",
-      customerEmail: cust?.email || "billing@client.com",
-      date: new Date().toISOString().split("T")[0],
-      expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      status: "Draft",
+      customerName: cust?.name || editingQuote?.customerName || "Draft Trade Partner",
+      customerEmail: cust?.email || editingQuote?.customerEmail || "billing@client.com",
+      customerPhone: cust?.phone || editingQuote?.customerPhone || "",
+      customerAddress: cust?.address || editingQuote?.customerAddress || "",
+      date: editingQuote ? editingQuote.date : new Date().toISOString().split("T")[0],
+      expiryDate: editingQuote ? editingQuote.expiryDate : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      status: watch("status") || (editingQuote ? editingQuote.status : "Draft"),
       lines: calculationPreview.lines || [],
       subtotal: calculationPreview.subtotal || 0,
       taxRate: effectiveFormTaxRate,
@@ -290,7 +388,7 @@ export const Quotations: React.FC = () => {
       discountAmount: calculationPreview.discountAmount || 0,
       taxAmount: calculationPreview.taxAmount || 0,
       total: calculationPreview.total || 0,
-      notes: watch("notes") || "Draft quotation specification"
+      notes: watch("notes") || (editingQuote ? editingQuote.notes : "Draft quotation specification")
     };
     handleOpenDirectPrint(draftQuote);
   };
@@ -316,7 +414,11 @@ export const Quotations: React.FC = () => {
   };
 
   const submitQuotation = (values: QuotationFormValues) => {
-    createMutation.mutate(values);
+    if (view === "edit" && editingQuote) {
+      updateMutation.mutate({ id: editingQuote.id, data: values });
+    } else {
+      createMutation.mutate(values);
+    }
   };
 
   // PDF document generator & downloader
@@ -364,7 +466,7 @@ export const Quotations: React.FC = () => {
               </button>
 
               <button
-                onClick={() => { setView("create"); }}
+                onClick={handleStartCreate}
                 id="btn-new-quote"
                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-md cursor-pointer transition-all"
               >
@@ -419,6 +521,17 @@ export const Quotations: React.FC = () => {
                         </td>
                         <td className="py-4 px-6 text-right">
                           <div className="flex items-center justify-end gap-2">
+                            {(!q.isConverted && (q.status === "Draft" || q.status === "Sent" || q.status === "Rejected")) && (
+                              <button
+                                onClick={() => handleEditQuote(q)}
+                                className="p-1.5 rounded-lg text-amber-700 bg-amber-50 hover:bg-amber-600 hover:text-white transition-all font-bold text-xs inline-flex items-center gap-1.5 border border-amber-200 shadow-3xs cursor-pointer"
+                                id={`btn-edit-${q.id}`}
+                                title="Edit Quotation"
+                              >
+                                <Pencil size={13} />
+                                <span>Edit</span>
+                              </button>
+                            )}
                             <button
                               onClick={() => { setSelectedQuoteId(q.id); setView("view"); }}
                               className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-all font-bold text-xs inline-flex items-center gap-1.5 border border-slate-200 shadow-3xs cursor-pointer"
@@ -464,21 +577,57 @@ export const Quotations: React.FC = () => {
         </div>
       )}
 
-      {/* 2. CREATE VIEW (STEPPED WIZARD ARITHMETIC WITH THE SERVER) */}
-      {view === "create" && (
+      {/* 2. CREATE OR EDIT VIEW */}
+      {(view === "create" || view === "edit") && (
         <div className="space-y-6">
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => { setView("list"); }}
-              className="p-2 border border-slate-200 bg-white rounded-xl text-slate-500 hover:text-slate-900 transition-colors"
-              title="Return to list"
-            >
-              <ArrowLeft size={16} />
-            </button>
-            <div>
-              <h1 className="text-xl font-black text-slate-950 tracking-tight">Draft New Sales Quotation</h1>
-              <p className="text-xs text-slate-400 mt-0.5 font-mono">Stepped configuration — All total pricing computed by custom backend</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button 
+                type="button"
+                onClick={() => {
+                  if (editingQuote && selectedQuoteId === editingQuote.id) {
+                    setView("view");
+                  } else {
+                    setView("list");
+                  }
+                  setEditingQuote(null);
+                }}
+                className="p-2 border border-slate-200 bg-white rounded-xl text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
+                title="Return to list"
+              >
+                <ArrowLeft size={16} />
+              </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-black text-slate-950 tracking-tight">
+                    {view === "edit" ? `Edit Quotation #${editingQuote?.quotationNumber}` : "Draft New Sales Quotation"}
+                  </h1>
+                  {view === "edit" && editingQuote && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono bg-amber-50 text-amber-700 border border-amber-200 uppercase">
+                      Editing {editingQuote.status}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5 font-mono">
+                  {view === "edit" 
+                    ? "Update hardware line items, customer details, discount terms, or taxes" 
+                    : "Stepped configuration — All total pricing computed by custom backend"}
+                </p>
+              </div>
             </div>
+
+            {view === "edit" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingQuote(null);
+                  setView("list");
+                }}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-all cursor-pointer"
+              >
+                Cancel Editing
+              </button>
+            )}
           </div>
 
           <form onSubmit={handleSubmit(submitQuotation)} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -655,10 +804,16 @@ export const Quotations: React.FC = () => {
                   <button
                     type="submit"
                     id="btn-quote-submit"
-                    disabled={createMutation.isPending || !calculationPreview}
+                    disabled={createMutation.isPending || updateMutation.isPending || !calculationPreview}
                     className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-sm font-bold text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    {createMutation.isPending ? "Compiling on Server..." : "Submit & Save Quote"}
+                    {updateMutation.isPending 
+                      ? "Saving Changes..." 
+                      : createMutation.isPending 
+                      ? "Compiling on Server..." 
+                      : view === "edit" 
+                      ? "Save Changes to Quotation" 
+                      : "Submit & Save Quote"}
                   </button>
                   <button
                     type="button"
@@ -668,14 +823,21 @@ export const Quotations: React.FC = () => {
                     className="w-full py-2 bg-slate-800 hover:bg-slate-700/90 disabled:opacity-40 text-xs text-slate-200 font-bold rounded-xl transition-all border border-slate-700/80 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <Printer size={13} />
-                    <span>Verify & Print Draft</span>
+                    <span>Verify & Print {view === "edit" ? "Quotation" : "Draft"}</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setView("list")}
-                    className="w-full py-2 bg-slate-800/60 hover:bg-slate-700/60 text-xs text-slate-400 font-bold rounded-xl transition-all border border-slate-800"
+                    onClick={() => {
+                      setEditingQuote(null);
+                      if (selectedQuoteId) {
+                        setView("view");
+                      } else {
+                        setView("list");
+                      }
+                    }}
+                    className="w-full py-2 bg-slate-800/60 hover:bg-slate-700/60 text-xs text-slate-400 font-bold rounded-xl transition-all border border-slate-800 cursor-pointer"
                   >
-                    Cancel Draft
+                    Cancel {view === "edit" ? "Editing" : "Draft"}
                   </button>
                 </div>
               </div>
@@ -698,6 +860,17 @@ export const Quotations: React.FC = () => {
             </button>
 
             <div className="flex items-center gap-2">
+              {(!selectedQuote.isConverted && (selectedQuote.status === "Draft" || selectedQuote.status === "Sent" || selectedQuote.status === "Rejected")) && (
+                <button
+                  onClick={() => handleEditQuote(selectedQuote)}
+                  id="btn-edit-draft-detail"
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                  title="Edit quotation items and parameters"
+                >
+                  <Pencil size={14} />
+                  <span>Edit Quote</span>
+                </button>
+              )}
               <button
                 onClick={() => handleOpenDirectPrint(selectedQuote)}
                 id="btn-direct-verify-print"
@@ -858,7 +1031,17 @@ export const Quotations: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-slate-100">
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  {(!selectedQuote.isConverted && (selectedQuote.status === "Draft" || selectedQuote.status === "Sent" || selectedQuote.status === "Rejected")) && (
+                    <button
+                      onClick={() => handleEditQuote(selectedQuote)}
+                      id="btn-edit-draft-ops"
+                      className="w-full py-2 bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Pencil size={14} />
+                      <span>Edit Quotation Items & Parameters</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       if (window.confirm("Verify: Delete this quotation profile permanently?")) {

@@ -898,9 +898,9 @@ export const quotationService = {
     const discountRate = payload.discountRate || 0;
     const discountAmount = subtotal * discountRate;
     const afterDiscount = subtotal - discountAmount;
-    const taxRate = 0;
-    const taxAmount = 0;
-    const total = afterDiscount;
+    const taxRate = payload.taxRate || 0;
+    const taxAmount = afterDiscount * taxRate;
+    const total = afterDiscount + taxAmount;
 
     const currentUser = auth.currentUser;
     const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "User");
@@ -967,33 +967,124 @@ export const quotationService = {
     }
   },
 
-  update: async (businessId: string, id: string, payload: Partial<Quotation>): Promise<Quotation> => {
+  update: async (businessId: string, id: string, payload: Partial<Quotation> & { items?: Array<{ productId: string; quantity: number }> }): Promise<Quotation> => {
     const path = `businesses/${businessId}/quotations/${id}`;
     try {
+      const refDoc = doc(db, "businesses", businessId, "quotations", id);
+      const existingSnap = await getDoc(refDoc);
+      if (!existingSnap.exists()) {
+        throw new Error("Quotation not found");
+      }
+      const existingQuote = existingSnap.data() as Quotation;
+
+      let customerName = payload.customerName || existingQuote.customerName || "";
+      let customerEmail = payload.customerEmail || existingQuote.customerEmail || "";
+      let customerPhone = payload.customerPhone || existingQuote.customerPhone || "";
+      let customerAddress = payload.customerAddress || existingQuote.customerAddress || "";
+
+      if (payload.customerId && payload.customerId !== existingQuote.customerId) {
+        try {
+          const custSnap = await getDoc(doc(db, "businesses", businessId, "customers", payload.customerId));
+          if (custSnap.exists()) {
+            const cust = custSnap.data() as Customer;
+            customerName = cust.name || customerName;
+            customerEmail = cust.email || "";
+            customerPhone = cust.phone || "";
+            customerAddress = cust.address || "";
+          }
+        } catch (err) {
+          console.warn("Could not fetch customer details for quote update:", err);
+        }
+      }
+
+      let lines = existingQuote.lines || [];
+      let subtotal = existingQuote.subtotal || 0;
+
+      if (payload.items && Array.isArray(payload.items)) {
+        lines = [];
+        subtotal = 0;
+        for (const item of payload.items) {
+          try {
+            const prodSnap = await getDoc(doc(db, "businesses", businessId, "products", item.productId));
+            if (prodSnap.exists()) {
+              const prod = prodSnap.data() as Product;
+              const lineTotal = item.quantity * prod.sellingPrice;
+              subtotal += lineTotal;
+              lines.push({
+                productId: item.productId,
+                productName: prod.name,
+                sku: prod.sku || "",
+                quantity: item.quantity,
+                unitPrice: prod.sellingPrice,
+                totalPrice: lineTotal
+              });
+            } else {
+              lines.push({
+                productId: item.productId,
+                productName: "Item",
+                quantity: item.quantity,
+                unitPrice: 50,
+                totalPrice: item.quantity * 50
+              });
+              subtotal += item.quantity * 50;
+            }
+          } catch {
+            lines.push({
+              productId: item.productId,
+              productName: "Item",
+              quantity: item.quantity,
+              unitPrice: 50,
+              totalPrice: item.quantity * 50
+            });
+            subtotal += item.quantity * 50;
+          }
+        }
+      }
+
+      const discountRate = payload.discountRate !== undefined ? payload.discountRate : (existingQuote.discountRate || 0);
+      const discountAmount = subtotal * discountRate;
+      const afterDiscount = Math.max(0, subtotal - discountAmount);
+      const taxRate = payload.taxRate !== undefined ? payload.taxRate : (existingQuote.taxRate || 0);
+      const taxAmount = afterDiscount * taxRate;
+      const total = afterDiscount + taxAmount;
+
       const currentUser = auth.currentUser;
       const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "User");
       const userEmail = currentUser?.email || "";
       const userUid = currentUser?.uid || "unknown";
       const nowIso = new Date().toISOString();
 
-      const refDoc = doc(db, "businesses", businessId, "quotations", id);
-      const updateData = {
+      const updateData: any = {
         ...payload,
+        customerName,
+        customerEmail,
+        customerPhone,
+        customerAddress,
+        lines,
+        subtotal,
+        discountRate,
+        discountAmount,
+        taxRate,
+        taxAmount,
+        total,
         updatedByUid: userUid,
         updatedByName: userName,
         updatedByEmail: userEmail,
         updatedAt: nowIso
       };
+
+      delete updateData.items;
+
       await updateDoc(refDoc, updateData);
       const snap = await getDoc(refDoc);
       const updatedQuote = { id: snap.id, ...snap.data() } as Quotation;
 
       await systemLogService.logAction(businessId, {
         category: "Quotation Management",
-        action: payload.status ? `QUOTATION_STATUS_${payload.status.toUpperCase()}` : "QUOTATION_UPDATED",
+        action: payload.status && payload.status !== existingQuote.status ? `QUOTATION_STATUS_${payload.status.toUpperCase()}` : "QUOTATION_UPDATED",
         userEmail,
         userName,
-        details: `Updated Quotation #${updatedQuote.quotationNumber}${payload.status ? ` status to '${payload.status}'` : ""}`,
+        details: `Updated Quotation #${updatedQuote.quotationNumber}${payload.status ? ` status to '${payload.status}'` : ""} (Total: $${total.toFixed(2)})`,
         targetId: id,
         severity: payload.status === "Accepted" ? "success" : "info"
       });

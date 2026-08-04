@@ -222,7 +222,7 @@ export const quotationService = {
     const bId = await getActiveBusinessId();
     return fsQuotationService.getOne(bId, id);
   },
-  update: async (id: string, payload: Partial<Quotation>): Promise<Quotation> => {
+  update: async (id: string, payload: Partial<Quotation> & { items?: Array<{ productId: string; quantity: number }> }): Promise<Quotation> => {
     const bId = await getActiveBusinessId();
     return fsQuotationService.update(bId, id, payload);
   },

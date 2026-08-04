@@ -1370,8 +1370,22 @@ app.put("/api/v1/quotations/:id", (req, res) => {
   const index = db.quotations.findIndex(q => q.id === req.params.id);
   if (index === -1) return res.status(404).json({ error: "Quotation not found" });
 
-  const { status, notes, discountRate, taxRate, items } = req.body;
+  const { status, notes, discountRate, taxRate, items, customerId } = req.body;
   const original = db.quotations[index];
+
+  let customerUpdates: any = {};
+  if (customerId && customerId !== original.customerId) {
+    const customer = db.customers.find(c => c.id === customerId);
+    if (customer) {
+      customerUpdates = {
+        customerId: customer.id,
+        customerName: customer.name,
+        customerEmail: customer.email,
+        customerPhone: customer.phone || "",
+        customerAddress: customer.address || ""
+      };
+    }
+  }
 
   let calculated = {
     lines: original.lines,
@@ -1395,6 +1409,7 @@ app.put("/api/v1/quotations/:id", (req, res) => {
 
   db.quotations[index] = {
     ...original,
+    ...customerUpdates,
     status: status || original.status,
     notes: notes !== undefined ? notes : original.notes,
     ...calculated
@@ -2600,7 +2615,7 @@ app.post("/api/v1/gemini/assist", async (req, res) => {
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-3.6-flash",
       contents: prompt,
       config: {
         systemInstruction,
@@ -2675,9 +2690,9 @@ Return ONLY valid JSON with NO markdown tags or extra output wrapping according 
   ]
 }`;
 
-      // Call Gemini 3.1 Pro Preview multimodal model
+      // Call Gemini 3.6 Flash multimodal model
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
+        model: "gemini-3.6-flash",
         contents: [
           {
             inlineData: {
