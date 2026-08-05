@@ -18,6 +18,7 @@ import {
 import { Quotation, Receipt } from "../types";
 import { settingsService } from "../services/api";
 import { getMergedCompanySettings } from "../constants/defaultSettings";
+import { QUOTATION_TERMS_AND_CONDITIONS } from "../constants/termsAndConditions";
 import { PrintConfirmationModal } from "./PrintConfirmationModal";
 
 interface PdfPreviewModalProps {
@@ -375,10 +376,49 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
           <div className="pt-4 border-t-2 border-slate-900 space-y-4 font-mono text-xs">
             
             {/* Totals Summary */}
-            <div className="flex justify-between items-center text-slate-900 font-extrabold text-sm bg-slate-50 p-3 rounded-lg border border-slate-200">
-              <span className="uppercase tracking-wide">{footerTerms}</span>
-              <span className="text-base text-blue-900">{currency} {total.toFixed(2)}</span>
+            <div className="space-y-1.5 bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <div className="flex justify-between items-center text-slate-600 text-xs">
+                <span>Subtotal:</span>
+                <span className="font-bold text-slate-900">{currency} {subtotal.toFixed(2)}</span>
+              </div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between items-center text-rose-600 text-xs">
+                  <span>Discount:</span>
+                  <span className="font-bold">- {currency} {discountAmount.toFixed(2)}</span>
+                </div>
+              )}
+              {taxAmount > 0 && (
+                <div className="flex justify-between items-center text-slate-600 text-xs">
+                  <span>VAT / Sales Tax:</span>
+                  <span className="font-bold text-slate-900">{currency} {taxAmount.toFixed(2)}</span>
+                </div>
+              )}
+              {isQuotation && (quoteData?.include_import_costs || quoteData?.includeImportCosts) && (quoteData?.total_import_costs || quoteData?.totalImportCosts || 0) > 0 && (
+                <div className="flex justify-between items-center text-slate-600 text-xs">
+                  <span>Total Import Costs:</span>
+                  <span className="font-bold text-slate-900">{currency} {(quoteData?.total_import_costs ?? quoteData?.totalImportCosts ?? 0).toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-slate-900 font-extrabold text-sm pt-1 border-t border-slate-200">
+                <span className="uppercase tracking-wide">{footerTerms}</span>
+                <span className="text-base text-blue-900">{currency} {total.toFixed(2)}</span>
+              </div>
             </div>
+
+            {/* Terms & Conditions (Quotation Only when enabled) */}
+            {isQuotation && (quoteData?.include_terms_conditions || quoteData?.includeTermsConditions) && (
+              <div className="pt-2 border-t border-slate-300 space-y-2">
+                <p className="font-bold text-xs text-slate-900 uppercase tracking-wider">Terms & Conditions</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[9.5px] font-sans text-slate-600 leading-relaxed">
+                  {QUOTATION_TERMS_AND_CONDITIONS.map((clause, idx) => (
+                    <div key={idx} className="bg-slate-50/80 p-2 rounded border border-slate-200/70">
+                      <p className="font-bold text-slate-800 text-[10px]">{clause.title}</p>
+                      <p className="text-slate-600">{clause.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Payment & Settlement Details Box */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 text-[11px] text-slate-800 border-t border-slate-200">

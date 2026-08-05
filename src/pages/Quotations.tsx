@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { quotationService, customerService, productService, settingsService, aiCopilotService } from "../services/api";
 import { getMergedCompanySettings } from "../constants/defaultSettings";
+import { QUOTATION_TERMS_AND_CONDITIONS } from "../constants/termsAndConditions";
 import logoImg from "../pic.png";
 import { Quotation, Customer, Product } from "../types";
 import { useToast } from "../components/Layout";
@@ -29,7 +30,10 @@ import {
   FileCheck2,
   FileHeart,
   ScanLine,
-  Pencil
+  Pencil,
+  DollarSign,
+  CheckSquare,
+  Square
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { UnifiedDocumentModal } from "../components/UnifiedDocumentModal";
@@ -43,6 +47,9 @@ const quotationFormSchema = z.object({
   discountRate: z.coerce.number().min(0).max(0.9, { message: "Discount cannot exceed 90%." }),
   enableTax: z.boolean().default(false),
   taxRate: z.coerce.number().min(0).max(100).default(0),
+  includeTermsConditions: z.boolean().default(false),
+  includeImportCosts: z.boolean().default(false),
+  totalImportCosts: z.coerce.number().min(0).default(0),
   notes: z.string().optional(),
   status: z.enum(["Draft", "Sent", "Accepted", "Rejected", "Expired"]).default("Draft"),
   items: z.array(
@@ -151,6 +158,9 @@ export const Quotations: React.FC = () => {
         let tr = data.taxRate || 0;
         effectiveTax = tr > 1 ? tr / 100 : tr;
       }
+      const incTerms = Boolean(data.includeTermsConditions);
+      const incImport = Boolean(data.includeImportCosts);
+      const importCost = incImport ? Number(data.totalImportCosts || 0) : 0;
       const selectedCust = customers.find(c => c.id === data.customerId);
       return quotationService.create({
         customerId: data.customerId,
@@ -161,6 +171,12 @@ export const Quotations: React.FC = () => {
         items: data.items,
         discountRate: data.discountRate,
         taxRate: effectiveTax,
+        includeTermsConditions: incTerms,
+        include_terms_conditions: incTerms,
+        includeImportCosts: incImport,
+        include_import_costs: incImport,
+        totalImportCosts: importCost,
+        total_import_costs: importCost,
         notes: data.notes,
         status: data.status,
       });
@@ -185,6 +201,9 @@ export const Quotations: React.FC = () => {
         let tr = data.taxRate || 0;
         effectiveTax = tr > 1 ? tr / 100 : tr;
       }
+      const incTerms = Boolean(data.includeTermsConditions);
+      const incImport = Boolean(data.includeImportCosts);
+      const importCost = incImport ? Number(data.totalImportCosts || 0) : 0;
       const selectedCust = customers.find(c => c.id === data.customerId);
       return quotationService.update(id, {
         customerId: data.customerId,
@@ -195,6 +214,12 @@ export const Quotations: React.FC = () => {
         items: data.items,
         discountRate: data.discountRate,
         taxRate: effectiveTax,
+        includeTermsConditions: incTerms,
+        include_terms_conditions: incTerms,
+        includeImportCosts: incImport,
+        include_import_costs: incImport,
+        totalImportCosts: importCost,
+        total_import_costs: importCost,
         notes: data.notes,
         status: data.status,
       });
@@ -257,6 +282,9 @@ export const Quotations: React.FC = () => {
       discountRate: 0,
       enableTax: false,
       taxRate: 0,
+      includeTermsConditions: false,
+      includeImportCosts: false,
+      totalImportCosts: 0,
       notes: "",
       status: "Draft",
       items: [{ productId: "", quantity: 1 }],
@@ -271,6 +299,9 @@ export const Quotations: React.FC = () => {
     const defaultRate = serverSettings?.taxRate !== undefined ? serverSettings.taxRate : 0;
     setValue("enableTax", isTaxOn);
     setValue("taxRate", defaultRate);
+    setValue("includeTermsConditions", false);
+    setValue("includeImportCosts", false);
+    setValue("totalImportCosts", 0);
     setValue("notes", "");
     setValue("status", "Draft");
     setValue("items", [{ productId: "", quantity: 1 }]);
@@ -292,6 +323,14 @@ export const Quotations: React.FC = () => {
     const hasTax = (quote.taxRate || 0) > 0;
     setValue("enableTax", hasTax);
     setValue("taxRate", (quote.taxRate || 0) > 1 ? quote.taxRate : Number(((quote.taxRate || 0) * 100).toFixed(2)));
+    
+    const incTerms = Boolean(quote.include_terms_conditions ?? quote.includeTermsConditions);
+    const incImport = Boolean(quote.include_import_costs ?? quote.includeImportCosts);
+    const importCost = Number(quote.total_import_costs ?? quote.totalImportCosts ?? 0);
+    setValue("includeTermsConditions", incTerms);
+    setValue("includeImportCosts", incImport);
+    setValue("totalImportCosts", importCost);
+
     setValue("notes", quote.notes || "");
     setValue("status", quote.status || "Draft");
 
@@ -356,11 +395,24 @@ export const Quotations: React.FC = () => {
   const formEnableTax = watch("enableTax");
   const formTaxRateInput = watch("taxRate") || 0;
   const effectiveFormTaxRate = formEnableTax ? (formTaxRateInput > 1 ? formTaxRateInput / 100 : formTaxRateInput) : 0;
+  const formIncludeTerms = watch("includeTermsConditions");
+  const formIncludeImportCosts = watch("includeImportCosts");
+  const formTotalImportCosts = watch("totalImportCosts") || 0;
 
   // Live Calculations Preview Query (computed on express backend asynchronously!)
   const { data: calculationPreview } = useQuery({
-    queryKey: ["quote-preview", formItems, formDiscountRate, effectiveFormTaxRate],
-    queryFn: () => quotationService.calculate({ items: formItems, discountRate: formDiscountRate, taxRate: effectiveFormTaxRate }),
+    queryKey: ["quote-preview", formItems, formDiscountRate, effectiveFormTaxRate, formIncludeTerms, formIncludeImportCosts, formTotalImportCosts],
+    queryFn: () => quotationService.calculate({
+      items: formItems,
+      discountRate: formDiscountRate,
+      taxRate: effectiveFormTaxRate,
+      includeTermsConditions: formIncludeTerms,
+      include_terms_conditions: formIncludeTerms,
+      includeImportCosts: formIncludeImportCosts,
+      include_import_costs: formIncludeImportCosts,
+      totalImportCosts: formIncludeImportCosts ? Number(formTotalImportCosts) : 0,
+      total_import_costs: formIncludeImportCosts ? Number(formTotalImportCosts) : 0,
+    }),
     enabled: formItems.length > 0 && formItems.every(i => i.productId && i.quantity > 0),
   });
 
@@ -387,6 +439,12 @@ export const Quotations: React.FC = () => {
       discountRate: formDiscountRate,
       discountAmount: calculationPreview.discountAmount || 0,
       taxAmount: calculationPreview.taxAmount || 0,
+      include_terms_conditions: formIncludeTerms,
+      includeTermsConditions: formIncludeTerms,
+      include_import_costs: formIncludeImportCosts,
+      includeImportCosts: formIncludeImportCosts,
+      total_import_costs: formIncludeImportCosts ? Number(formTotalImportCosts) : 0,
+      totalImportCosts: formIncludeImportCosts ? Number(formTotalImportCosts) : 0,
       total: calculationPreview.total || 0,
       notes: watch("notes") || (editingQuote ? editingQuote.notes : "Draft quotation specification")
     };
@@ -755,6 +813,76 @@ export const Quotations: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {/* Step 3: Configurable Terms & Conditions and Import Costs */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-xs space-y-5">
+                <div className="flex items-center gap-2 text-indigo-900 pb-3 border-b border-slate-100">
+                  <span className="h-6 w-6 rounded-md bg-indigo-50 border border-indigo-100 font-bold font-mono text-xs flex items-center justify-center text-indigo-600">3</span>
+                  <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Quotation Terms & Import Options</h3>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Terms & Conditions Toggle */}
+                  <div className="flex items-start gap-3 p-3.5 bg-slate-50/70 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors">
+                    <input
+                      type="checkbox"
+                      id="include-terms-conditions"
+                      {...register("includeTermsConditions")}
+                      className="mt-0.5 h-4 w-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                    />
+                    <label htmlFor="include-terms-conditions" className="cursor-pointer select-none space-y-0.5">
+                      <span className="text-xs font-bold text-slate-900 block">Include Terms & Conditions</span>
+                      <span className="text-[11px] text-slate-500 block leading-relaxed">
+                        When enabled, includes the standard 6-clause Terms & Conditions (Quotation Validity, Pricing & Taxes, Availability, Delivery, Payment, and Acceptance) on the quotation and generated PDF.
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Import Costs Toggle */}
+                  <div className="space-y-3 p-3.5 bg-slate-50/70 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id="include-import-costs"
+                        {...register("includeImportCosts")}
+                        className="mt-0.5 h-4 w-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                      />
+                      <label htmlFor="include-import-costs" className="cursor-pointer select-none space-y-0.5 flex-1">
+                        <span className="text-xs font-bold text-slate-900 block">Include Import Costs</span>
+                        <span className="text-[11px] text-slate-500 block leading-relaxed">
+                          When enabled, permits entering total import duties/freight charges. Import costs are shown separately and added directly to the final quotation total without altering individual item prices.
+                        </span>
+                      </label>
+                    </div>
+
+                    {/* Conditional Total Import Costs Input */}
+                    {formIncludeImportCosts && (
+                      <div className="pt-3 border-t border-slate-200/80 pl-7 space-y-1.5 animate-fadeIn">
+                        <label htmlFor="total-import-costs" className="block text-xs font-bold text-slate-700 uppercase tracking-wide">
+                          Total Import Costs ($)
+                        </label>
+                        <div className="relative max-w-xs">
+                          <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 font-mono text-xs">
+                            $
+                          </span>
+                          <input
+                            type="number"
+                            id="total-import-costs"
+                            step="0.01"
+                            min="0"
+                            placeholder="0.00"
+                            {...register("totalImportCosts", { valueAsNumber: true })}
+                            className="w-full bg-white border border-slate-300 rounded-lg pl-7 pr-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-mono">
+                          Import costs will be clearly itemized on the quotation summary and added to Grand Total.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Live Pricing Summary Block - Server authoritative */}
@@ -782,15 +910,37 @@ export const Quotations: React.FC = () => {
                         <span>Cart Subtotal</span>
                         <span>${calculationPreview.subtotal.toFixed(2)}</span>
                       </div>
-                      <div className="flex justify-between text-slate-400">
-                        <span>Discount ({formDiscountRate * 100}%)</span>
-                        <span className="text-rose-400">-${calculationPreview.discountAmount.toFixed(2)}</span>
-                      </div>
+                      {calculationPreview.discountAmount > 0 && (
+                        <div className="flex justify-between text-slate-400">
+                          <span>Discount ({formDiscountRate * 100}%)</span>
+                          <span className="text-rose-400">-${calculationPreview.discountAmount.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {calculationPreview.taxAmount > 0 && (
+                        <div className="flex justify-between text-slate-400">
+                          <span>VAT / Sales Tax</span>
+                          <span>+${calculationPreview.taxAmount.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {formIncludeImportCosts && (Number(formTotalImportCosts || 0) > 0 || (calculationPreview.total_import_costs || 0) > 0) && (
+                        <div className="flex justify-between text-indigo-300 border-t border-slate-800/60 pt-1">
+                          <span>Total Import Costs</span>
+                          <span className="font-bold">+${Number(formTotalImportCosts || calculationPreview.total_import_costs || 0).toFixed(2)}</span>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="pt-4 border-t border-slate-800 flex justify-between items-center">
-                      <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 font-sans">Grand Total</span>
-                      <span className="text-2xl font-black font-mono text-blue-400">${calculationPreview.total.toFixed(2)}</span>
+                    <div className="pt-3 border-t border-slate-800 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 font-sans">Grand Total</span>
+                        <span className="text-2xl font-black font-mono text-blue-400">${calculationPreview.total.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800/80">
+                        <span>Terms & Conditions:</span>
+                        <span className={`font-bold ${formIncludeTerms ? "text-emerald-400" : "text-slate-500"}`}>
+                          {formIncludeTerms ? "Included" : "Omitted"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -994,6 +1144,18 @@ export const Quotations: React.FC = () => {
                       <span className="text-rose-500">-${selectedQuote.discountAmount.toFixed(2)}</span>
                     </div>
                   )}
+                  {(selectedQuote.taxAmount || 0) > 0 && (
+                    <div className="flex justify-between text-slate-400">
+                      <span>VAT / Sales Tax</span>
+                      <span className="text-slate-900 font-bold">${(selectedQuote.taxAmount || 0).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {(selectedQuote.include_import_costs || selectedQuote.includeImportCosts) && (selectedQuote.total_import_costs || selectedQuote.totalImportCosts || 0) > 0 && (
+                    <div className="flex justify-between text-indigo-600">
+                      <span>Total Import Costs</span>
+                      <span className="font-bold">${(selectedQuote.total_import_costs ?? selectedQuote.totalImportCosts ?? 0).toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="h-[1px] bg-slate-100 my-2"></div>
                   <div className="flex justify-between items-center text-sm font-black pt-1">
                     <span className="font-sans text-slate-400 uppercase tracking-wide">GRAND TOTAL DUE ($)</span>
@@ -1001,6 +1163,24 @@ export const Quotations: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Terms & Conditions Block (When Enabled on Quotation) */}
+              {(selectedQuote.include_terms_conditions || selectedQuote.includeTermsConditions) && (
+                <div className="pt-6 border-t border-slate-200 space-y-3">
+                  <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                    <FileText size={15} className="text-blue-600" />
+                    <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider font-mono">Quotation Terms & Conditions</h4>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] text-slate-600 font-sans leading-relaxed">
+                    {QUOTATION_TERMS_AND_CONDITIONS.map((clause, idx) => (
+                      <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 space-y-1">
+                        <p className="font-bold text-slate-800 text-xs">{clause.title}</p>
+                        <p className="text-slate-600 text-[10.5px] leading-relaxed">{clause.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Document Interactive Controls & Gemini AI Generative Copilot */}

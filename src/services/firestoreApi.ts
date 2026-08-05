@@ -823,7 +823,7 @@ export const quotationService = {
     }
   },
 
-  calculate: async (payload: { items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number }) => {
+  calculate: async (payload: { items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; include_terms_conditions?: boolean; includeTermsConditions?: boolean; include_import_costs?: boolean; includeImportCosts?: boolean; total_import_costs?: number; totalImportCosts?: number; }) => {
     let subtotal = 0;
     for (const item of payload.items) {
       subtotal += item.quantity * 100;
@@ -832,7 +832,10 @@ export const quotationService = {
     const afterDiscount = subtotal - discountAmount;
     const taxRate = 0;
     const taxAmount = 0;
-    const total = afterDiscount;
+    const incImport = Boolean(payload.include_import_costs ?? payload.includeImportCosts);
+    const importCost = incImport ? Number(payload.total_import_costs ?? payload.totalImportCosts ?? 0) : 0;
+    const incTerms = Boolean(payload.include_terms_conditions ?? payload.includeTermsConditions);
+    const total = afterDiscount + taxAmount + importCost;
     return {
       lines: payload.items.map(i => ({ productId: i.productId, productName: "Product", quantity: i.quantity, unitPrice: 100, totalPrice: i.quantity * 100 })),
       subtotal,
@@ -840,11 +843,17 @@ export const quotationService = {
       discountAmount,
       taxRate,
       taxAmount,
+      include_terms_conditions: incTerms,
+      includeTermsConditions: incTerms,
+      include_import_costs: incImport,
+      includeImportCosts: incImport,
+      total_import_costs: importCost,
+      totalImportCosts: importCost,
       total,
     };
   },
 
-  create: async (businessId: string, payload: { customerId: string; customerName?: string; customerEmail?: string; customerPhone?: string; customerAddress?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; notes?: string; status?: string }): Promise<Quotation> => {
+  create: async (businessId: string, payload: { customerId: string; customerName?: string; customerEmail?: string; customerPhone?: string; customerAddress?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; notes?: string; status?: string; include_terms_conditions?: boolean; includeTermsConditions?: boolean; include_import_costs?: boolean; includeImportCosts?: boolean; total_import_costs?: number; totalImportCosts?: number; }): Promise<Quotation> => {
     const id = `quote-${Date.now()}`;
     const quotationNumber = `QT-${Date.now().toString().slice(-6)}`;
     const path = `businesses/${businessId}/quotations/${id}`;
@@ -900,7 +909,10 @@ export const quotationService = {
     const afterDiscount = subtotal - discountAmount;
     const taxRate = payload.taxRate || 0;
     const taxAmount = afterDiscount * taxRate;
-    const total = afterDiscount + taxAmount;
+    const incTerms = Boolean(payload.include_terms_conditions ?? payload.includeTermsConditions);
+    const incImport = Boolean(payload.include_import_costs ?? payload.includeImportCosts);
+    const importCost = incImport ? Number(payload.total_import_costs ?? payload.totalImportCosts ?? 0) : 0;
+    const total = afterDiscount + taxAmount + importCost;
 
     const currentUser = auth.currentUser;
     const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "User");
@@ -925,6 +937,12 @@ export const quotationService = {
       discountRate,
       discountAmount,
       total,
+      include_terms_conditions: incTerms,
+      includeTermsConditions: incTerms,
+      include_import_costs: incImport,
+      includeImportCosts: incImport,
+      total_import_costs: importCost,
+      totalImportCosts: importCost,
       status: (payload.status as any) || "Draft",
       notes: payload.notes || "",
       createdByUid: userUid,
@@ -1046,7 +1064,10 @@ export const quotationService = {
       const afterDiscount = Math.max(0, subtotal - discountAmount);
       const taxRate = payload.taxRate !== undefined ? payload.taxRate : (existingQuote.taxRate || 0);
       const taxAmount = afterDiscount * taxRate;
-      const total = afterDiscount + taxAmount;
+      const incTerms = payload.include_terms_conditions !== undefined ? Boolean(payload.include_terms_conditions) : (payload.includeTermsConditions !== undefined ? Boolean(payload.includeTermsConditions) : (existingQuote.include_terms_conditions ?? existingQuote.includeTermsConditions ?? false));
+      const incImport = payload.include_import_costs !== undefined ? Boolean(payload.include_import_costs) : (payload.includeImportCosts !== undefined ? Boolean(payload.includeImportCosts) : (existingQuote.include_import_costs ?? existingQuote.includeImportCosts ?? false));
+      const importCost = incImport ? (payload.total_import_costs !== undefined ? Number(payload.total_import_costs) : (payload.totalImportCosts !== undefined ? Number(payload.totalImportCosts) : Number(existingQuote.total_import_costs ?? existingQuote.totalImportCosts ?? 0))) : 0;
+      const total = afterDiscount + taxAmount + importCost;
 
       const currentUser = auth.currentUser;
       const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "User");
@@ -1066,6 +1087,12 @@ export const quotationService = {
         discountAmount,
         taxRate,
         taxAmount,
+        include_terms_conditions: incTerms,
+        includeTermsConditions: incTerms,
+        include_import_costs: incImport,
+        includeImportCosts: incImport,
+        total_import_costs: importCost,
+        totalImportCosts: importCost,
         total,
         updatedByUid: userUid,
         updatedByName: userName,

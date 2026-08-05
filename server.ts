@@ -63,6 +63,8 @@ interface Quotation {
   customerId: string;
   customerName: string;
   customerEmail: string;
+  customerPhone?: string;
+  customerAddress?: string;
   date: string;
   expiryDate: string;
   lines: QuotationLine[];
@@ -72,8 +74,14 @@ interface Quotation {
   discountRate: number; // e.g. 10% (0.10)
   discountAmount: number;
   total: number;
-  status: "Draft" | "Sent" | "Accepted" | "Rejected" | "Expired";
+  status: "Draft" | "Sent" | "Accepted" | "Rejected" | "Expired" | "Converted";
   notes?: string;
+  include_terms_conditions?: boolean;
+  includeTermsConditions?: boolean;
+  include_import_costs?: boolean;
+  includeImportCosts?: boolean;
+  total_import_costs?: number;
+  totalImportCosts?: number;
 }
 
 interface ReceiptLine {
@@ -1270,7 +1278,9 @@ function calculateCartTotals(
   discountRate: number, 
   products: Product[],
   taxRateInput?: number | string | null,
-  companySettings?: CompanySettings
+  companySettings?: CompanySettings,
+  includeImportCostsInput?: boolean,
+  totalImportCostsInput?: number
 ) {
   let taxRate = 0;
   const lines: any[] = [];
@@ -1297,7 +1307,9 @@ function calculateCartTotals(
   const discountAmount = Number((subtotal * discountRate).toFixed(2));
   const subtotalAfterDiscount = Math.max(0, subtotal - discountAmount);
   const taxAmount = 0;
-  const total = Number(subtotalAfterDiscount.toFixed(2));
+  const incImport = Boolean(includeImportCostsInput);
+  const importCost = incImport ? Number(totalImportCostsInput || 0) : 0;
+  const total = Number((subtotalAfterDiscount + importCost).toFixed(2));
 
   return {
     lines,
@@ -1306,6 +1318,10 @@ function calculateCartTotals(
     taxAmount,
     discountRate,
     discountAmount,
+    include_import_costs: incImport,
+    includeImportCosts: incImport,
+    total_import_costs: importCost,
+    totalImportCosts: importCost,
     total
   };
 }
@@ -1317,18 +1333,41 @@ app.get("/api/v1/quotations", (req, res) => {
 });
 
 app.post("/api/v1/quotations/calculate", (req, res) => {
-  const { items, discountRate, taxRate } = req.body;
+  const { 
+    items, 
+    discountRate, 
+    taxRate, 
+    include_import_costs, 
+    includeImportCosts, 
+    total_import_costs, 
+    totalImportCosts 
+  } = req.body;
   if (!items || !Array.isArray(items)) {
     return res.status(400).json({ error: "items array is required" });
   }
   const db = getDb();
-  const result = calculateCartTotals(items, Number(discountRate || 0), db.products, taxRate, db.companySettings);
+  const incImport = Boolean(include_import_costs ?? includeImportCosts);
+  const importCost = Number(total_import_costs ?? totalImportCosts ?? 0);
+  const result = calculateCartTotals(items, Number(discountRate || 0), db.products, taxRate, db.companySettings, incImport, importCost);
   res.json(result);
 });
 
 app.post("/api/v1/quotations", (req, res) => {
   const db = getDb();
-  const { customerId, items, discountRate, taxRate, notes, status } = req.body;
+  const { 
+    customerId, 
+    items, 
+    discountRate, 
+    taxRate, 
+    notes, 
+    status,
+    include_terms_conditions,
+    includeTermsConditions,
+    include_import_costs,
+    includeImportCosts,
+    total_import_costs,
+    totalImportCosts
+  } = req.body;
   if (!customerId || !items || !Array.isArray(items)) {
     return res.status(400).json({ error: "customerId and items are required" });
   }
@@ -1336,7 +1375,11 @@ app.post("/api/v1/quotations", (req, res) => {
   const customer = db.customers.find(c => c.id === customerId);
   if (!customer) return res.status(404).json({ error: "Customer not found" });
 
-  const calculated = calculateCartTotals(items, Number(discountRate || 0), db.products, taxRate, db.companySettings);
+  const incTerms = Boolean(include_terms_conditions ?? includeTermsConditions);
+  const incImport = Boolean(include_import_costs ?? includeImportCosts);
+  const importCost = incImport ? Number(total_import_costs ?? totalImportCosts ?? 0) : 0;
+
+  const calculated = calculateCartTotals(items, Number(discountRate || 0), db.products, taxRate, db.companySettings, incImport, importCost);
 
   const newQuote: Quotation = {
     id: `qt-${Date.now()}`,
@@ -1344,6 +1387,8 @@ app.post("/api/v1/quotations", (req, res) => {
     customerId: customer.id,
     customerName: customer.name,
     customerEmail: customer.email,
+    customerPhone: customer.phone,
+    customerAddress: customer.address,
     date: new Date().toISOString().split("T")[0],
     expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     lines: calculated.lines,
@@ -1353,6 +1398,12 @@ app.post("/api/v1/quotations", (req, res) => {
     discountRate: calculated.discountRate,
     discountAmount: calculated.discountAmount,
     total: calculated.total,
+    include_terms_conditions: incTerms,
+    includeTermsConditions: incTerms,
+    include_import_costs: incImport,
+    includeImportCosts: incImport,
+    total_import_costs: importCost,
+    totalImportCosts: importCost,
     status: status || "Draft",
     notes: notes || ""
   };
@@ -1374,7 +1425,20 @@ app.put("/api/v1/quotations/:id", (req, res) => {
   const index = db.quotations.findIndex(q => q.id === req.params.id);
   if (index === -1) return res.status(404).json({ error: "Quotation not found" });
 
-  const { status, notes, discountRate, taxRate, items, customerId } = req.body;
+  const { 
+    status, 
+    notes, 
+    discountRate, 
+    taxRate, 
+    items, 
+    customerId,
+    include_terms_conditions,
+    includeTermsConditions,
+    include_import_costs,
+    includeImportCosts,
+    total_import_costs,
+    totalImportCosts
+  } = req.body;
   const original = db.quotations[index];
 
   let customerUpdates: any = {};
@@ -1391,24 +1455,19 @@ app.put("/api/v1/quotations/:id", (req, res) => {
     }
   }
 
-  let calculated = {
-    lines: original.lines,
-    subtotal: original.subtotal,
-    taxRate: original.taxRate,
-    taxAmount: original.taxAmount,
-    discountRate: original.discountRate,
-    discountAmount: original.discountAmount,
-    total: original.total
-  };
+  const incTerms = include_terms_conditions !== undefined ? Boolean(include_terms_conditions) : (includeTermsConditions !== undefined ? Boolean(includeTermsConditions) : (original.include_terms_conditions ?? original.includeTermsConditions ?? false));
+  const incImport = include_import_costs !== undefined ? Boolean(include_import_costs) : (includeImportCosts !== undefined ? Boolean(includeImportCosts) : (original.include_import_costs ?? original.includeImportCosts ?? false));
+  const importCost = incImport ? (total_import_costs !== undefined ? Number(total_import_costs) : (totalImportCosts !== undefined ? Number(totalImportCosts) : Number(original.total_import_costs ?? original.totalImportCosts ?? 0))) : 0;
 
   const effectiveTaxRate = taxRate !== undefined ? taxRate : original.taxRate;
   const effectiveDiscountRate = discountRate !== undefined ? Number(discountRate) : original.discountRate;
 
+  let calculated: any;
   if (items && Array.isArray(items)) {
-    calculated = calculateCartTotals(items, effectiveDiscountRate, db.products, effectiveTaxRate, db.companySettings);
-  } else if (discountRate !== undefined || taxRate !== undefined) {
+    calculated = calculateCartTotals(items, effectiveDiscountRate, db.products, effectiveTaxRate, db.companySettings, incImport, importCost);
+  } else {
     const standardInputItems = original.lines.map(l => ({ productId: l.productId, quantity: l.quantity }));
-    calculated = calculateCartTotals(standardInputItems, effectiveDiscountRate, db.products, effectiveTaxRate, db.companySettings);
+    calculated = calculateCartTotals(standardInputItems, effectiveDiscountRate, db.products, effectiveTaxRate, db.companySettings, incImport, importCost);
   }
 
   db.quotations[index] = {
@@ -1416,6 +1475,12 @@ app.put("/api/v1/quotations/:id", (req, res) => {
     ...customerUpdates,
     status: status || original.status,
     notes: notes !== undefined ? notes : original.notes,
+    include_terms_conditions: incTerms,
+    includeTermsConditions: incTerms,
+    include_import_costs: incImport,
+    includeImportCosts: incImport,
+    total_import_costs: importCost,
+    totalImportCosts: importCost,
     ...calculated
   };
 

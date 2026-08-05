@@ -13,6 +13,7 @@ import {
   Product
 } from "../types";
 import { DEFAULT_COMPANY_SETTINGS, getMergedCompanySettings } from "../constants/defaultSettings";
+import { QUOTATION_TERMS_AND_CONDITIONS } from "../constants/termsAndConditions";
 
 export type SupportedDocumentType = 
   | "po" 
@@ -65,6 +66,11 @@ export interface NormalizedPrintDocument {
   paymentMethod?: string;
   bankAccountName?: string;
   
+  // Quotation specific configuration
+  include_terms_conditions?: boolean;
+  include_import_costs?: boolean;
+  total_import_costs?: number;
+
   // Authorization / Signatures
   preparedBy?: string;
   approvedBy?: string;
@@ -367,6 +373,10 @@ export function normalizeDocument(
 
     case "quotation": {
       const q = docData as Quotation;
+      const incTerms = Boolean(q.include_terms_conditions ?? q.includeTermsConditions);
+      const incImport = Boolean(q.include_import_costs ?? q.includeImportCosts);
+      const importCost = incImport ? Number(q.total_import_costs ?? q.totalImportCosts ?? 0) : 0;
+
       return {
         docType: "quotation",
         title: "SALES QUOTATION",
@@ -381,7 +391,7 @@ export function normalizeDocument(
         metaFields: [
           { label: "Quotation #", value: q.quotationNumber },
           { label: "Date Issued", value: q.date },
-          { label: "Valid Until", value: q.expiryDate || "14 Days from date of issue" }
+          { label: "Valid Until", value: q.expiryDate || "30 Days from date of issue" }
         ],
         lines: (q.lines || []).map((line, idx) => ({
           id: line.productId || `q-line-${idx}`,
@@ -394,8 +404,11 @@ export function normalizeDocument(
         currency,
         subtotal: q.subtotal,
         discountAmount: q.discountAmount || 0,
-        taxAmount: 0,
+        taxAmount: q.taxAmount || 0,
         totalAmount: q.total,
+        include_terms_conditions: incTerms,
+        include_import_costs: incImport,
+        total_import_costs: importCost,
         preparedBy: "Sales Department",
         notes: q.notes
       };
@@ -883,10 +896,22 @@ export async function generatePdfBlob(
   doc.text(`Subtotal:`, summaryX, y);
   doc.text(`${normDoc.currency} ${normDoc.subtotal.toFixed(2)}`, pageWidth - 18, y, { align: "right" });
   
+  if (normDoc.discountAmount > 0) {
+    y += 4;
+    doc.text(`Discount:`, summaryX, y);
+    doc.text(`-${normDoc.currency} ${normDoc.discountAmount.toFixed(2)}`, pageWidth - 18, y, { align: "right" });
+  }
+
   if (normDoc.taxAmount > 0) {
     y += 4;
     doc.text(`Tax:`, summaryX, y);
     doc.text(`${normDoc.currency} ${normDoc.taxAmount.toFixed(2)}`, pageWidth - 18, y, { align: "right" });
+  }
+
+  if (normDoc.include_import_costs && (normDoc.total_import_costs || 0) > 0) {
+    y += 4;
+    doc.text(`Import Costs:`, summaryX, y);
+    doc.text(`${normDoc.currency} ${(normDoc.total_import_costs || 0).toFixed(2)}`, pageWidth - 18, y, { align: "right" });
   }
 
   y += 6;
@@ -897,6 +922,48 @@ export async function generatePdfBlob(
   doc.setTextColor(255, 255, 255);
   doc.text(`TOTAL:`, summaryX, y + 1);
   doc.text(`${normDoc.currency} ${normDoc.totalAmount.toFixed(2)}`, pageWidth - 18, y + 1, { align: "right" });
+
+  y += 12;
+
+  // Render Terms & Conditions if enabled
+  if (normDoc.include_terms_conditions) {
+    if (y + 55 > pageHeight - 20) {
+      doc.addPage();
+      y = 15;
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text("TERMS & CONDITIONS", 15, y);
+    y += 4;
+
+    QUOTATION_TERMS_AND_CONDITIONS.forEach((clause) => {
+      if (y + 12 > pageHeight - 16) {
+        doc.addPage();
+        y = 15;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(51, 65, 85);
+      doc.text(clause.title, 15, y);
+      y += 3;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(71, 85, 105);
+      const clauseLines = doc.splitTextToSize(clause.content, pageWidth - 30);
+      clauseLines.forEach((cLine: string) => {
+        if (y > pageHeight - 14) {
+          doc.addPage();
+          y = 15;
+        }
+        doc.text(cLine, 15, y);
+        y += 2.8;
+      });
+      y += 1.5;
+    });
+  }
 
   // Footer Disclaimer
   const footerY = doc.internal.pageSize.getHeight() - 12;

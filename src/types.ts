@@ -435,6 +435,12 @@ export interface Quotation {
   invoiceNumber?: string;
   isConverted?: boolean;
   notes?: string;
+  include_terms_conditions?: boolean;
+  includeTermsConditions?: boolean;
+  include_import_costs?: boolean;
+  includeImportCosts?: boolean;
+  total_import_costs?: number;
+  totalImportCosts?: number;
   createdByUid?: string;
   createdByName?: string;
   createdByEmail?: string;
