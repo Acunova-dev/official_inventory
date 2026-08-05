@@ -10,7 +10,7 @@ export const QUOTATION_TERMS_AND_CONDITIONS: TermClause[] = [
   },
   {
     title: "Pricing, Taxes & Duties",
-    content: "All prices quoted are in United States Dollars (USD). Import duties, customs charges, clearance fees, and statutory taxes may apply and will be charged based on prevailing rates at the time of clearance unless explicitly stated as inclusive."
+    content: "All prices quoted are in United States Dollars (USD). Import costs, including freight, customs duties, and related charges where applicable, are indicated separately and are based on estimates available at the time of quotation. Actual import costs will be confirmed once the shipment has been received and processed by the freight forwarder. Where the actual import costs differ from the estimate provided, the customer will be advised before the order is finalized or dispatched."
   },
   {
     title: "Availability of Goods",
