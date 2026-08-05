@@ -14,18 +14,18 @@ export const QUOTATION_TERMS_AND_CONDITIONS: TermClause[] = [
   },
   {
     title: "Availability of Goods",
-    content: "All items quoted are subject to stock availability and prior sale. Lead times and delivery dates are estimated based on information from manufacturers and shipping carriers."
+    content: "The items quoted may be supplied from existing stock and/or procured specifically for this order. Availability of specially procured items is subject to supplier confirmation at the time of order."
   },
   {
     title: "Order Confirmation, Lead Time & Delivery",
-    content: "A quotation becomes a binding order only upon receipt of a written purchase order or signed quotation confirmation, accompanied by any agreed deposit or advance payment. Delivery timeframes commence from the date of order confirmation and receipt of the required deposit."
+    content: "Procurement of goods will commence upon receipt of an official Purchase Order (PO) and fulfillment of the agreed payment terms. Estimated delivery periods are generally 14–30 working days unless otherwise specified in the quotation. Delivery periods are estimates only and may vary due to supplier availability, manufacturing schedules, shipping, customs clearance, or other factors beyond our reasonable control."
   },
   {
     title: "Payment Terms, Warranty & Inspection",
-    content: "Unless credit terms have been expressly agreed in writing, full payment is required prior to dispatch or upon delivery. Goods supplied carry manufacturer warranties where applicable. The customer must inspect goods upon delivery and notify any discrepancies within 48 hours."
+    content: "Payment shall be made in accordance with the agreed payment terms and, unless otherwise agreed in writing, before dispatch of the goods. Products are supplied with the applicable manufacturer's warranty where available. The customer is responsible for inspecting all goods upon delivery and must report any shortages, incorrect items, or visible damage within 48 hours of receipt."
   },
   {
     title: "Acceptance",
-    content: "By accepting this quotation, the customer agrees to these terms and conditions."
+    content: "Acceptance of this quotation or issuance of a Purchase Order constitutes acceptance of these Terms & Conditions."
   }
 ];
