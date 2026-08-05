@@ -697,39 +697,6 @@ export class PdfFlowEngine {
     this.doc.setDrawColor(148, 163, 184);
     this.doc.setLineWidth(0.2);
 
-    // Col 1: Prepared By
-    this.doc.line(col1X, lineY, col1X + colWidth, lineY);
-    this.doc.setFont("helvetica", "bold");
-    this.doc.setFontSize(8);
-    this.doc.setTextColor(15, 23, 42);
-    this.doc.text(normDoc.preparedBy || "System User", col1X + colWidth / 2, lineY - 2, { align: "center" });
-    this.doc.setFont("helvetica", "normal");
-    this.doc.setFontSize(7);
-    this.doc.setTextColor(100, 116, 139);
-    this.doc.text("PREPARED / ISSUED BY", col1X + colWidth / 2, lineY + 3.5, { align: "center" });
-
-    // Col 2: Approved By
-    this.doc.line(col2X, lineY, col2X + colWidth, lineY);
-    this.doc.setFont("helvetica", "bold");
-    this.doc.setFontSize(8);
-    this.doc.setTextColor(15, 23, 42);
-    this.doc.text(normDoc.approvedBy || "Authorized Signatory", col2X + colWidth / 2, lineY - 2, { align: "center" });
-    this.doc.setFont("helvetica", "normal");
-    this.doc.setFontSize(7);
-    this.doc.setTextColor(100, 116, 139);
-    this.doc.text("APPROVED & STAMPED BY", col2X + colWidth / 2, lineY + 3.5, { align: "center" });
-
-    // Col 3: Received By / Customer Acceptance
-    this.doc.line(col3X, lineY, col3X + colWidth, lineY);
-    this.doc.setFont("helvetica", "bold");
-    this.doc.setFontSize(8);
-    this.doc.setTextColor(15, 23, 42);
-    this.doc.text(normDoc.receivedBy || "Client / Receiver Sign", col3X + colWidth / 2, lineY - 2, { align: "center" });
-    this.doc.setFont("helvetica", "normal");
-    this.doc.setFontSize(7);
-    this.doc.setTextColor(100, 116, 139);
-    this.doc.text("RECEIVED / ACKNOWLEDGED BY", col3X + colWidth / 2, lineY + 3.5, { align: "center" });
-
     this.currentY = atY + sigBlockHeight + 4;
   }
 
