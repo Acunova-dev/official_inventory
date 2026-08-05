@@ -360,6 +360,8 @@ export interface CompanySettings {
   accountNumber?: string;
   rtgsAccountNumber?: string;
   usdAccountNumber?: string;
+  rtgsAccount?: string;
+  usdAccount?: string;
   ecocashNumber?: string;
   currency?: string;
   salesType?: string;
@@ -411,6 +413,7 @@ export interface QuotationLine {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  baseUnitPrice?: number;
 }
 
 export interface Quotation {
@@ -441,6 +444,15 @@ export interface Quotation {
   includeImportCosts?: boolean;
   total_import_costs?: number;
   totalImportCosts?: number;
+  allowZiGPayments?: boolean;
+  allow_zig_payments?: boolean;
+  interbankRate?: number;
+  interbank_rate?: number;
+  streetRate?: number;
+  street_rate?: number;
+  calculatedMultiplier?: number;
+  calculated_multiplier?: number;
+  paymentTermsNotice?: string;
   createdByUid?: string;
   createdByName?: string;
   createdByEmail?: string;

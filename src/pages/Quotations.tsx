@@ -50,6 +50,9 @@ const quotationFormSchema = z.object({
   includeTermsConditions: z.boolean().default(false),
   includeImportCosts: z.boolean().default(false),
   totalImportCosts: z.coerce.number().min(0).default(0),
+  allowZiGPayments: z.boolean().default(false),
+  interbankRate: z.coerce.number().min(0).optional(),
+  streetRate: z.coerce.number().min(0).optional(),
   notes: z.string().optional(),
   status: z.enum(["Draft", "Sent", "Accepted", "Rejected", "Expired"]).default("Draft"),
   items: z.array(
@@ -58,6 +61,14 @@ const quotationFormSchema = z.object({
       quantity: z.coerce.number().int().min(1, { message: "Qty must be at least 1" }),
     })
   ).min(1, { message: "You must add at least one electronics item to the quotation." }),
+}).refine(data => {
+  if (data.allowZiGPayments) {
+    return (data.interbankRate !== undefined && data.interbankRate > 0) && (data.streetRate !== undefined && data.streetRate > 0);
+  }
+  return true;
+}, {
+  message: "Interbank Rate and Street Rate are required when ZiG payments are enabled.",
+  path: ["interbankRate"]
 });
 
 type QuotationFormValues = z.infer<typeof quotationFormSchema>;
@@ -161,6 +172,9 @@ export const Quotations: React.FC = () => {
       const incTerms = Boolean(data.includeTermsConditions);
       const incImport = Boolean(data.includeImportCosts);
       const importCost = incImport ? Number(data.totalImportCosts || 0) : 0;
+      const allowZiG = Boolean(data.allowZiGPayments);
+      const iRate = allowZiG && data.interbankRate ? Number(data.interbankRate) : undefined;
+      const sRate = allowZiG && data.streetRate ? Number(data.streetRate) : undefined;
       const selectedCust = customers.find(c => c.id === data.customerId);
       return quotationService.create({
         customerId: data.customerId,
@@ -177,6 +191,12 @@ export const Quotations: React.FC = () => {
         include_import_costs: incImport,
         totalImportCosts: importCost,
         total_import_costs: importCost,
+        allowZiGPayments: allowZiG,
+        allow_zig_payments: allowZiG,
+        interbankRate: iRate,
+        interbank_rate: iRate,
+        streetRate: sRate,
+        street_rate: sRate,
         notes: data.notes,
         status: data.status,
       });
@@ -204,6 +224,9 @@ export const Quotations: React.FC = () => {
       const incTerms = Boolean(data.includeTermsConditions);
       const incImport = Boolean(data.includeImportCosts);
       const importCost = incImport ? Number(data.totalImportCosts || 0) : 0;
+      const allowZiG = Boolean(data.allowZiGPayments);
+      const iRate = allowZiG && data.interbankRate ? Number(data.interbankRate) : undefined;
+      const sRate = allowZiG && data.streetRate ? Number(data.streetRate) : undefined;
       const selectedCust = customers.find(c => c.id === data.customerId);
       return quotationService.update(id, {
         customerId: data.customerId,
@@ -220,6 +243,12 @@ export const Quotations: React.FC = () => {
         include_import_costs: incImport,
         totalImportCosts: importCost,
         total_import_costs: importCost,
+        allowZiGPayments: allowZiG,
+        allow_zig_payments: allowZiG,
+        interbankRate: iRate,
+        interbank_rate: iRate,
+        streetRate: sRate,
+        street_rate: sRate,
         notes: data.notes,
         status: data.status,
       });
@@ -285,6 +314,9 @@ export const Quotations: React.FC = () => {
       includeTermsConditions: false,
       includeImportCosts: false,
       totalImportCosts: 0,
+      allowZiGPayments: false,
+      interbankRate: undefined,
+      streetRate: undefined,
       notes: "",
       status: "Draft",
       items: [{ productId: "", quantity: 1 }],
@@ -302,6 +334,9 @@ export const Quotations: React.FC = () => {
     setValue("includeTermsConditions", false);
     setValue("includeImportCosts", false);
     setValue("totalImportCosts", 0);
+    setValue("allowZiGPayments", false);
+    setValue("interbankRate", "");
+    setValue("streetRate", "");
     setValue("notes", "");
     setValue("status", "Draft");
     setValue("items", [{ productId: "", quantity: 1 }]);
@@ -330,6 +365,11 @@ export const Quotations: React.FC = () => {
     setValue("includeTermsConditions", incTerms);
     setValue("includeImportCosts", incImport);
     setValue("totalImportCosts", importCost);
+
+    const allowZiG = Boolean(quote.allowZiGPayments ?? quote.allow_zig_payments);
+    setValue("allowZiGPayments", allowZiG);
+    setValue("interbankRate", quote.interbankRate ?? quote.interbank_rate ?? "");
+    setValue("streetRate", quote.streetRate ?? quote.street_rate ?? "");
 
     setValue("notes", quote.notes || "");
     setValue("status", quote.status || "Draft");
@@ -398,10 +438,24 @@ export const Quotations: React.FC = () => {
   const formIncludeTerms = watch("includeTermsConditions");
   const formIncludeImportCosts = watch("includeImportCosts");
   const formTotalImportCosts = watch("totalImportCosts") || 0;
+  const formAllowZiGPayments = watch("allowZiGPayments");
+  const formInterbankRate = watch("interbankRate");
+  const formStreetRate = watch("streetRate");
 
   // Live Calculations Preview Query (computed on express backend asynchronously!)
   const { data: calculationPreview } = useQuery({
-    queryKey: ["quote-preview", formItems, formDiscountRate, effectiveFormTaxRate, formIncludeTerms, formIncludeImportCosts, formTotalImportCosts],
+    queryKey: [
+      "quote-preview", 
+      formItems, 
+      formDiscountRate, 
+      effectiveFormTaxRate, 
+      formIncludeTerms, 
+      formIncludeImportCosts, 
+      formTotalImportCosts,
+      formAllowZiGPayments,
+      formInterbankRate,
+      formStreetRate
+    ],
     queryFn: () => quotationService.calculate({
       items: formItems,
       discountRate: formDiscountRate,
@@ -412,6 +466,12 @@ export const Quotations: React.FC = () => {
       include_import_costs: formIncludeImportCosts,
       totalImportCosts: formIncludeImportCosts ? Number(formTotalImportCosts) : 0,
       total_import_costs: formIncludeImportCosts ? Number(formTotalImportCosts) : 0,
+      allowZiGPayments: formAllowZiGPayments,
+      allow_zig_payments: formAllowZiGPayments,
+      interbankRate: formAllowZiGPayments && formInterbankRate ? Number(formInterbankRate) : undefined,
+      interbank_rate: formAllowZiGPayments && formInterbankRate ? Number(formInterbankRate) : undefined,
+      streetRate: formAllowZiGPayments && formStreetRate ? Number(formStreetRate) : undefined,
+      street_rate: formAllowZiGPayments && formStreetRate ? Number(formStreetRate) : undefined,
     }),
     enabled: formItems.length > 0 && formItems.every(i => i.productId && i.quantity > 0),
   });
@@ -445,6 +505,14 @@ export const Quotations: React.FC = () => {
       includeImportCosts: formIncludeImportCosts,
       total_import_costs: formIncludeImportCosts ? Number(formTotalImportCosts) : 0,
       totalImportCosts: formIncludeImportCosts ? Number(formTotalImportCosts) : 0,
+      allowZiGPayments: formAllowZiGPayments,
+      allow_zig_payments: formAllowZiGPayments,
+      interbankRate: formAllowZiGPayments && formInterbankRate ? Number(formInterbankRate) : undefined,
+      interbank_rate: formAllowZiGPayments && formInterbankRate ? Number(formInterbankRate) : undefined,
+      streetRate: formAllowZiGPayments && formStreetRate ? Number(formStreetRate) : undefined,
+      street_rate: formAllowZiGPayments && formStreetRate ? Number(formStreetRate) : undefined,
+      calculatedMultiplier: calculationPreview.calculatedMultiplier,
+      calculated_multiplier: calculationPreview.calculatedMultiplier,
       total: calculationPreview.total || 0,
       notes: watch("notes") || (editingQuote ? editingQuote.notes : "Draft quotation specification")
     };
@@ -563,19 +631,30 @@ export const Quotations: React.FC = () => {
                         <td className="py-4 px-6 text-right text-slate-500 font-mono">{q.lines.length} Parts</td>
                         <td className="py-4 px-6 text-right font-black text-slate-900 font-mono">${q.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="py-4 px-6 text-center">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
-                            q.status === "Accepted" 
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
-                              : q.status === "Sent" 
-                              ? "bg-blue-50 text-blue-700 border border-blue-100" 
-                              : q.status === "Draft" 
-                              ? "bg-slate-100 text-slate-600/90 border border-slate-200"
-                              : q.status === "Expired"
-                              ? "bg-zinc-100 text-zinc-500/90"
-                              : "bg-rose-50 text-rose-700 border border-rose-100"
-                          }`}>
-                            {q.status}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                              q.status === "Accepted" 
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
+                                : q.status === "Sent" 
+                                ? "bg-blue-50 text-blue-700 border border-blue-100" 
+                                : q.status === "Draft" 
+                                ? "bg-slate-100 text-slate-600/90 border border-slate-200"
+                                : q.status === "Expired"
+                                ? "bg-zinc-100 text-zinc-500/90"
+                                : "bg-rose-50 text-rose-700 border border-rose-100"
+                            }`}>
+                              {q.status}
+                            </span>
+                            {(q.allowZiGPayments || q.allow_zig_payments) ? (
+                              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-150">
+                                USD & ZiG
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
+                                USD Only
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-4 px-6 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -814,10 +893,94 @@ export const Quotations: React.FC = () => {
                 </div>
               </div>
 
-              {/* Step 3: Configurable Terms & Conditions and Import Costs */}
+              {/* Step 3: Payment Options (ZiG Adjustment) */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-xs space-y-5">
                 <div className="flex items-center gap-2 text-indigo-900 pb-3 border-b border-slate-100">
                   <span className="h-6 w-6 rounded-md bg-indigo-50 border border-indigo-100 font-bold font-mono text-xs flex items-center justify-center text-indigo-600">3</span>
+                  <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Payment Options</h3>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Allow ZiG Payments Checkbox */}
+                  <div className="p-4 bg-slate-50/70 rounded-xl border border-slate-200 hover:border-slate-300 transition-colors space-y-3">
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id="allow-zig-payments"
+                        {...register("allowZiGPayments")}
+                        className="mt-0.5 h-4 w-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 cursor-pointer"
+                      />
+                      <label htmlFor="allow-zig-payments" className="cursor-pointer select-none space-y-0.5 flex-1">
+                        <span className="text-xs font-bold text-slate-900 block">Allow ZiG Payments</span>
+                        <span className="text-[11px] text-slate-500 block leading-relaxed">
+                          Enable dual-currency payment acceptance (USD & ZiG). When enabled, quotation prices are automatically adjusted internally based on prevailing interbank and street exchange rates. Customer documents display adjusted unit prices seamlessly in USD without exposing rate calculations.
+                        </span>
+                      </label>
+                    </div>
+
+                    {/* Exchange Rate Input Fields (displayed only when checked) */}
+                    {formAllowZiGPayments && (
+                      <div className="pt-3 border-t border-slate-200/80 pl-7 space-y-3 animate-fadeIn">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label htmlFor="interbank-rate" className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+                              Interbank Rate <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="number"
+                              id="interbank-rate"
+                              step="0.01"
+                              min="0.01"
+                              placeholder="e.g. 26.5"
+                              {...register("interbankRate", { valueAsNumber: true, required: formAllowZiGPayments })}
+                              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                            {errors.interbankRate && (
+                              <p className="text-xs text-rose-500 mt-1 font-medium">{errors.interbankRate.message as string}</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label htmlFor="street-rate" className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+                              Street Rate <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="number"
+                              id="street-rate"
+                              step="0.01"
+                              min="0.01"
+                              placeholder="e.g. 42.0"
+                              {...register("streetRate", { valueAsNumber: true, required: formAllowZiGPayments })}
+                              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                            {errors.streetRate && (
+                              <p className="text-xs text-rose-500 mt-1 font-medium">{errors.streetRate.message as string}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Internal Multiplier helper badge (for staff reference only during drafting) */}
+                        {Number(formInterbankRate) > 0 && Number(formStreetRate) > 0 && (
+                          <div className="flex items-center justify-between p-2.5 bg-blue-50/80 rounded-lg border border-blue-200/80 text-[11px] font-mono text-blue-900">
+                            <span className="font-semibold">Internal Price Multiplier (Rounded Up 0.1):</span>
+                            <span className="font-bold bg-blue-600 text-white px-2 py-0.5 rounded">
+                              {(Math.ceil((Number(formStreetRate) / Number(formInterbankRate)) * 10) / 10).toFixed(1)}x
+                            </span>
+                          </div>
+                        )}
+                        <p className="text-[10px] text-slate-500 font-mono">
+                          Note: Rate calculations, multipliers, and adjustment factors are kept internal and will NEVER appear on customer-facing PDFs or printouts.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 4: Configurable Terms & Conditions and Import Costs */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-xs space-y-5">
+                <div className="flex items-center gap-2 text-indigo-900 pb-3 border-b border-slate-100">
+                  <span className="h-6 w-6 rounded-md bg-indigo-50 border border-indigo-100 font-bold font-mono text-xs flex items-center justify-center text-indigo-600">4</span>
                   <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wider">Quotation Terms & Import Options</h3>
                 </div>
 
@@ -934,6 +1097,14 @@ export const Quotations: React.FC = () => {
                       <div className="flex justify-between items-center">
                         <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 font-sans">Grand Total</span>
                         <span className="text-2xl font-black font-mono text-blue-400">${calculationPreview.total.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800/80">
+                        <span>Payment Mode:</span>
+                        <span className={`font-bold ${formAllowZiGPayments ? "text-indigo-400" : "text-slate-400"}`}>
+                          {formAllowZiGPayments 
+                            ? `USD & ZiG (${calculationPreview.calculatedMultiplier || (Number(formStreetRate) > 0 && Number(formInterbankRate) > 0 ? (Math.ceil((Number(formStreetRate) / Number(formInterbankRate)) * 10) / 10).toFixed(1) : "1.0")}x)` 
+                            : "USD Only"}
+                        </span>
                       </div>
                       <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800/80">
                         <span>Terms & Conditions:</span>
@@ -1121,14 +1292,36 @@ export const Quotations: React.FC = () => {
                 </div>
               </div>
 
-              {/* Calculation Summary Footer */}
+              {/* Calculation Summary Footer & Payment Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 pt-6 border-t border-slate-150 gap-6">
-                <div className="text-xs text-slate-400 leading-relaxed font-sans">
-                  <p className="font-semibold text-slate-600 uppercase tracking-widest text-[9px] mb-1">Important Notice</p>
-                  <p>VAT is locked on this invoice profile. Bank Wire instructions: VoltSync Billing Core Acct #8849-002-CA, routing code 1210-99. Goods are subject to storage limits.</p>
+                <div className="text-xs text-slate-500 leading-relaxed font-sans space-y-3">
+                  <div>
+                    <p className="font-semibold text-slate-700 uppercase tracking-widest text-[9px] mb-1">Payment Notice</p>
+                    <p className="font-medium text-slate-800">
+                      {(selectedQuote.allowZiGPayments || selectedQuote.allow_zig_payments) 
+                        ? "USD & ZiG payments accepted." 
+                        : "Payments accepted in USD only."}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="font-semibold text-slate-700 uppercase tracking-widest text-[9px] mb-1">Banking Details</p>
+                    <div className="space-y-1 text-[11px] text-slate-600">
+                      {(mergedSettings.usdAccountNumber || mergedSettings.usdAccount || mergedSettings.accountNumber) && (
+                        <p><span className="font-bold text-slate-700">USD Account:</span> {mergedSettings.usdAccountNumber || mergedSettings.usdAccount || mergedSettings.accountNumber}</p>
+                      )}
+                      {(selectedQuote.allowZiGPayments || selectedQuote.allow_zig_payments) && (mergedSettings.rtgsAccountNumber || mergedSettings.rtgsAccount) && (
+                        <p><span className="font-bold text-slate-700">RTGS Bank Account:</span> {mergedSettings.rtgsAccountNumber || mergedSettings.rtgsAccount}</p>
+                      )}
+                      {mergedSettings.ecocashNumber && (
+                        <p><span className="font-bold text-slate-700">EcoCash:</span> {mergedSettings.ecocashNumber}</p>
+                      )}
+                    </div>
+                  </div>
+
                   {selectedQuote.notes && (
                     <div className="mt-3 p-2.5 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 font-semibold text-slate-700 text-xs">
-                      Internal: {selectedQuote.notes}
+                      Internal Notes: {selectedQuote.notes}
                     </div>
                   )}
                 </div>

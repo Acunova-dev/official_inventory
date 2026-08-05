@@ -211,10 +211,49 @@ export const quotationService = {
     const bId = await getActiveBusinessId();
     return fsQuotationService.getAll(bId);
   },
-  calculate: async (payload: { items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; include_terms_conditions?: boolean; includeTermsConditions?: boolean; include_import_costs?: boolean; includeImportCosts?: boolean; total_import_costs?: number; totalImportCosts?: number; }): Promise<Omit<Quotation, "id" | "quotationNumber" | "customerId" | "customerName" | "customerEmail" | "date" | "expiryDate" | "status">> => {
+  calculate: async (payload: {
+    items: Array<{ productId: string; quantity: number; unitPrice?: number }>;
+    discountRate: number;
+    taxRate?: number;
+    include_terms_conditions?: boolean;
+    includeTermsConditions?: boolean;
+    include_import_costs?: boolean;
+    includeImportCosts?: boolean;
+    total_import_costs?: number;
+    totalImportCosts?: number;
+    allowZiGPayments?: boolean;
+    allow_zig_payments?: boolean;
+    interbankRate?: number;
+    interbank_rate?: number;
+    streetRate?: number;
+    street_rate?: number;
+  }): Promise<Omit<Quotation, "id" | "quotationNumber" | "customerId" | "customerName" | "customerEmail" | "date" | "expiryDate" | "status">> => {
     return fsQuotationService.calculate(payload);
   },
-  create: async (payload: { customerId: string; customerName?: string; customerEmail?: string; customerPhone?: string; customerAddress?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; notes?: string; status?: string; include_terms_conditions?: boolean; includeTermsConditions?: boolean; include_import_costs?: boolean; includeImportCosts?: boolean; total_import_costs?: number; totalImportCosts?: number; }): Promise<Quotation> => {
+  create: async (payload: {
+    customerId: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    customerAddress?: string;
+    items: Array<{ productId: string; quantity: number }>;
+    discountRate: number;
+    taxRate?: number;
+    notes?: string;
+    status?: string;
+    include_terms_conditions?: boolean;
+    includeTermsConditions?: boolean;
+    include_import_costs?: boolean;
+    includeImportCosts?: boolean;
+    total_import_costs?: number;
+    totalImportCosts?: number;
+    allowZiGPayments?: boolean;
+    allow_zig_payments?: boolean;
+    interbankRate?: number;
+    interbank_rate?: number;
+    streetRate?: number;
+    street_rate?: number;
+  }): Promise<Quotation> => {
     const bId = await getActiveBusinessId();
     return fsQuotationService.create(bId, payload);
   },
@@ -222,7 +261,21 @@ export const quotationService = {
     const bId = await getActiveBusinessId();
     return fsQuotationService.getOne(bId, id);
   },
-  update: async (id: string, payload: Partial<Quotation> & { items?: Array<{ productId: string; quantity: number }>; include_terms_conditions?: boolean; includeTermsConditions?: boolean; include_import_costs?: boolean; includeImportCosts?: boolean; total_import_costs?: number; totalImportCosts?: number; }): Promise<Quotation> => {
+  update: async (id: string, payload: Partial<Quotation> & {
+    items?: Array<{ productId: string; quantity: number }>;
+    include_terms_conditions?: boolean;
+    includeTermsConditions?: boolean;
+    include_import_costs?: boolean;
+    includeImportCosts?: boolean;
+    total_import_costs?: number;
+    totalImportCosts?: number;
+    allowZiGPayments?: boolean;
+    allow_zig_payments?: boolean;
+    interbankRate?: number;
+    interbank_rate?: number;
+    streetRate?: number;
+    street_rate?: number;
+  }): Promise<Quotation> => {
     const bId = await getActiveBusinessId();
     return fsQuotationService.update(bId, id, payload);
   },

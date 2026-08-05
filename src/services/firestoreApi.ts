@@ -823,21 +823,60 @@ export const quotationService = {
     }
   },
 
-  calculate: async (payload: { items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; include_terms_conditions?: boolean; includeTermsConditions?: boolean; include_import_costs?: boolean; includeImportCosts?: boolean; total_import_costs?: number; totalImportCosts?: number; }) => {
-    let subtotal = 0;
-    for (const item of payload.items) {
-      subtotal += item.quantity * 100;
+  calculate: async (payload: {
+    items: Array<{ productId: string; quantity: number; unitPrice?: number }>;
+    discountRate: number;
+    taxRate?: number;
+    include_terms_conditions?: boolean;
+    includeTermsConditions?: boolean;
+    include_import_costs?: boolean;
+    includeImportCosts?: boolean;
+    total_import_costs?: number;
+    totalImportCosts?: number;
+    allowZiGPayments?: boolean;
+    allow_zig_payments?: boolean;
+    interbankRate?: number;
+    interbank_rate?: number;
+    streetRate?: number;
+    street_rate?: number;
+  }) => {
+    const allowZiG = Boolean(payload.allowZiGPayments ?? payload.allow_zig_payments);
+    const iRate = Number(payload.interbankRate ?? payload.interbank_rate ?? 0);
+    const sRate = Number(payload.streetRate ?? payload.street_rate ?? 0);
+
+    let multiplier = 1.0;
+    if (allowZiG && iRate > 0 && sRate > 0) {
+      const adjustmentFactor = sRate / iRate;
+      multiplier = Math.ceil(adjustmentFactor * 10) / 10;
     }
-    const discountAmount = subtotal * (payload.discountRate || 0);
-    const afterDiscount = subtotal - discountAmount;
-    const taxRate = 0;
-    const taxAmount = 0;
+
+    let subtotal = 0;
+    const lines = (payload.items || []).map(i => {
+      const basePrice = i.unitPrice !== undefined ? Number(i.unitPrice) : 100;
+      const unitPrice = multiplier > 1 ? Number((basePrice * multiplier).toFixed(2)) : basePrice;
+      const lineTotal = Number((i.quantity * unitPrice).toFixed(2));
+      subtotal += lineTotal;
+      return {
+        productId: i.productId,
+        productName: "Product",
+        quantity: i.quantity,
+        unitPrice,
+        totalPrice: lineTotal,
+        baseUnitPrice: basePrice
+      };
+    });
+
+    const discountAmount = Number((subtotal * (payload.discountRate || 0)).toFixed(2));
+    const afterDiscount = Math.max(0, subtotal - discountAmount);
+    const taxRate = payload.taxRate || 0;
+    const taxAmount = Number((afterDiscount * taxRate).toFixed(2));
     const incImport = Boolean(payload.include_import_costs ?? payload.includeImportCosts);
     const importCost = incImport ? Number(payload.total_import_costs ?? payload.totalImportCosts ?? 0) : 0;
     const incTerms = Boolean(payload.include_terms_conditions ?? payload.includeTermsConditions);
-    const total = afterDiscount + taxAmount + importCost;
+    const total = Number((afterDiscount + taxAmount + importCost).toFixed(2));
+
     return {
-      lines: payload.items.map(i => ({ productId: i.productId, productName: "Product", quantity: i.quantity, unitPrice: 100, totalPrice: i.quantity * 100 })),
+      lines,
       subtotal,
       discountRate: payload.discountRate,
       discountAmount,
@@ -849,11 +888,42 @@ export const quotationService = {
       includeImportCosts: incImport,
       total_import_costs: importCost,
       totalImportCosts: importCost,
+      allowZiGPayments: allowZiG,
+      allow_zig_payments: allowZiG,
+      interbankRate: iRate || undefined,
+      interbank_rate: iRate || undefined,
+      streetRate: sRate || undefined,
+      street_rate: sRate || undefined,
+      calculatedMultiplier: multiplier,
+      calculated_multiplier: multiplier,
       total,
     };
   },
 
-  create: async (businessId: string, payload: { customerId: string; customerName?: string; customerEmail?: string; customerPhone?: string; customerAddress?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; notes?: string; status?: string; include_terms_conditions?: boolean; includeTermsConditions?: boolean; include_import_costs?: boolean; includeImportCosts?: boolean; total_import_costs?: number; totalImportCosts?: number; }): Promise<Quotation> => {
+  create: async (businessId: string, payload: {
+    customerId: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    customerAddress?: string;
+    items: Array<{ productId: string; quantity: number }>;
+    discountRate: number;
+    taxRate?: number;
+    notes?: string;
+    status?: string;
+    include_terms_conditions?: boolean;
+    includeTermsConditions?: boolean;
+    include_import_costs?: boolean;
+    includeImportCosts?: boolean;
+    total_import_costs?: number;
+    totalImportCosts?: number;
+    allowZiGPayments?: boolean;
+    allow_zig_payments?: boolean;
+    interbankRate?: number;
+    interbank_rate?: number;
+    streetRate?: number;
+    street_rate?: number;
+  }): Promise<Quotation> => {
     const id = `quote-${Date.now()}`;
     const quotationNumber = `QT-${Date.now().toString().slice(-6)}`;
     const path = `businesses/${businessId}/quotations/${id}`;
@@ -880,6 +950,16 @@ export const quotationService = {
 
     if (!customerName) customerName = "Valued Customer";
 
+    const allowZiG = Boolean(payload.allowZiGPayments ?? payload.allow_zig_payments);
+    const iRate = Number(payload.interbankRate ?? payload.interbank_rate ?? 0);
+    const sRate = Number(payload.streetRate ?? payload.street_rate ?? 0);
+
+    let multiplier = 1.0;
+    if (allowZiG && iRate > 0 && sRate > 0) {
+      const adjustmentFactor = sRate / iRate;
+      multiplier = Math.ceil(adjustmentFactor * 10) / 10;
+    }
+
     const lines = [];
     let subtotal = 0;
 
@@ -888,31 +968,38 @@ export const quotationService = {
         const prodSnap = await getDoc(doc(db, "businesses", businessId, "products", item.productId));
         if (prodSnap.exists()) {
           const prod = prodSnap.data() as Product;
-          const lineTotal = item.quantity * prod.sellingPrice;
+          const basePrice = prod.sellingPrice;
+          const unitPrice = multiplier > 1 ? Number((basePrice * multiplier).toFixed(2)) : basePrice;
+          const lineTotal = Number((item.quantity * unitPrice).toFixed(2));
           subtotal += lineTotal;
           lines.push({
             productId: item.productId,
             productName: prod.name,
+            sku: prod.sku || "",
             quantity: item.quantity,
-            unitPrice: prod.sellingPrice,
-            totalPrice: lineTotal
+            unitPrice: unitPrice,
+            totalPrice: lineTotal,
+            baseUnitPrice: basePrice
           });
         }
       } catch {
-        lines.push({ productId: item.productId, productName: "Item", quantity: item.quantity, unitPrice: 50, totalPrice: item.quantity * 50 });
-        subtotal += item.quantity * 50;
+        const basePrice = 50;
+        const unitPrice = multiplier > 1 ? Number((basePrice * multiplier).toFixed(2)) : basePrice;
+        const lineTotal = Number((item.quantity * unitPrice).toFixed(2));
+        lines.push({ productId: item.productId, productName: "Item", quantity: item.quantity, unitPrice, totalPrice: lineTotal, baseUnitPrice: basePrice });
+        subtotal += lineTotal;
       }
     }
 
     const discountRate = payload.discountRate || 0;
-    const discountAmount = subtotal * discountRate;
-    const afterDiscount = subtotal - discountAmount;
+    const discountAmount = Number((subtotal * discountRate).toFixed(2));
+    const afterDiscount = Math.max(0, subtotal - discountAmount);
     const taxRate = payload.taxRate || 0;
-    const taxAmount = afterDiscount * taxRate;
+    const taxAmount = Number((afterDiscount * taxRate).toFixed(2));
     const incTerms = Boolean(payload.include_terms_conditions ?? payload.includeTermsConditions);
     const incImport = Boolean(payload.include_import_costs ?? payload.includeImportCosts);
     const importCost = incImport ? Number(payload.total_import_costs ?? payload.totalImportCosts ?? 0) : 0;
-    const total = afterDiscount + taxAmount + importCost;
+    const total = Number((afterDiscount + taxAmount + importCost).toFixed(2));
 
     const currentUser = auth.currentUser;
     const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "User");
@@ -943,6 +1030,14 @@ export const quotationService = {
       includeImportCosts: incImport,
       total_import_costs: importCost,
       totalImportCosts: importCost,
+      allowZiGPayments: allowZiG,
+      allow_zig_payments: allowZiG,
+      interbankRate: iRate || undefined,
+      interbank_rate: iRate || undefined,
+      streetRate: sRate || undefined,
+      street_rate: sRate || undefined,
+      calculatedMultiplier: multiplier,
+      calculated_multiplier: multiplier,
       status: (payload.status as any) || "Draft",
       notes: payload.notes || "",
       createdByUid: userUid,
@@ -1015,8 +1110,18 @@ export const quotationService = {
         }
       }
 
+      const allowZiG = payload.allowZiGPayments !== undefined ? Boolean(payload.allowZiGPayments) : (payload.allow_zig_payments !== undefined ? Boolean(payload.allow_zig_payments) : Boolean(existingQuote.allowZiGPayments ?? existingQuote.allow_zig_payments));
+      const iRate = payload.interbankRate !== undefined ? Number(payload.interbankRate) : (payload.interbank_rate !== undefined ? Number(payload.interbank_rate) : Number(existingQuote.interbankRate ?? existingQuote.interbank_rate ?? 0));
+      const sRate = payload.streetRate !== undefined ? Number(payload.streetRate) : (payload.street_rate !== undefined ? Number(payload.street_rate) : Number(existingQuote.streetRate ?? existingQuote.street_rate ?? 0));
+
+      let multiplier = 1.0;
+      if (allowZiG && iRate > 0 && sRate > 0) {
+        const adjustmentFactor = sRate / iRate;
+        multiplier = Math.ceil(adjustmentFactor * 10) / 10;
+      }
+
       let lines = existingQuote.lines || [];
-      let subtotal = existingQuote.subtotal || 0;
+      let subtotal = 0;
 
       if (payload.items && Array.isArray(payload.items)) {
         lines = [];
@@ -1026,48 +1131,75 @@ export const quotationService = {
             const prodSnap = await getDoc(doc(db, "businesses", businessId, "products", item.productId));
             if (prodSnap.exists()) {
               const prod = prodSnap.data() as Product;
-              const lineTotal = item.quantity * prod.sellingPrice;
+              const basePrice = prod.sellingPrice;
+              const unitPrice = multiplier > 1 ? Number((basePrice * multiplier).toFixed(2)) : basePrice;
+              const lineTotal = Number((item.quantity * unitPrice).toFixed(2));
               subtotal += lineTotal;
               lines.push({
                 productId: item.productId,
                 productName: prod.name,
                 sku: prod.sku || "",
                 quantity: item.quantity,
-                unitPrice: prod.sellingPrice,
-                totalPrice: lineTotal
+                unitPrice,
+                totalPrice: lineTotal,
+                baseUnitPrice: basePrice
               });
             } else {
+              const basePrice = 50;
+              const unitPrice = multiplier > 1 ? Number((basePrice * multiplier).toFixed(2)) : basePrice;
+              const lineTotal = Number((item.quantity * unitPrice).toFixed(2));
               lines.push({
                 productId: item.productId,
                 productName: "Item",
                 quantity: item.quantity,
-                unitPrice: 50,
-                totalPrice: item.quantity * 50
+                unitPrice,
+                totalPrice: lineTotal,
+                baseUnitPrice: basePrice
               });
-              subtotal += item.quantity * 50;
+              subtotal += lineTotal;
             }
           } catch {
+            const basePrice = 50;
+            const unitPrice = multiplier > 1 ? Number((basePrice * multiplier).toFixed(2)) : basePrice;
+            const lineTotal = Number((item.quantity * unitPrice).toFixed(2));
             lines.push({
               productId: item.productId,
               productName: "Item",
               quantity: item.quantity,
-              unitPrice: 50,
-              totalPrice: item.quantity * 50
+              unitPrice,
+              totalPrice: lineTotal,
+              baseUnitPrice: basePrice
             });
-            subtotal += item.quantity * 50;
+            subtotal += lineTotal;
           }
         }
+      } else if (multiplier !== (existingQuote.calculatedMultiplier || 1.0)) {
+        // If multiplier changed without new item list, recalculate existing lines
+        lines = lines.map(line => {
+          const basePrice = line.baseUnitPrice ?? line.unitPrice;
+          const unitPrice = multiplier > 1 ? Number((basePrice * multiplier).toFixed(2)) : basePrice;
+          const totalPrice = Number((line.quantity * unitPrice).toFixed(2));
+          return {
+            ...line,
+            unitPrice,
+            totalPrice,
+            baseUnitPrice: basePrice
+          };
+        });
+        subtotal = lines.reduce((acc, l) => acc + l.totalPrice, 0);
+      } else {
+        subtotal = existingQuote.subtotal || lines.reduce((acc, l) => acc + l.totalPrice, 0);
       }
 
       const discountRate = payload.discountRate !== undefined ? payload.discountRate : (existingQuote.discountRate || 0);
-      const discountAmount = subtotal * discountRate;
+      const discountAmount = Number((subtotal * discountRate).toFixed(2));
       const afterDiscount = Math.max(0, subtotal - discountAmount);
       const taxRate = payload.taxRate !== undefined ? payload.taxRate : (existingQuote.taxRate || 0);
-      const taxAmount = afterDiscount * taxRate;
+      const taxAmount = Number((afterDiscount * taxRate).toFixed(2));
       const incTerms = payload.include_terms_conditions !== undefined ? Boolean(payload.include_terms_conditions) : (payload.includeTermsConditions !== undefined ? Boolean(payload.includeTermsConditions) : (existingQuote.include_terms_conditions ?? existingQuote.includeTermsConditions ?? false));
       const incImport = payload.include_import_costs !== undefined ? Boolean(payload.include_import_costs) : (payload.includeImportCosts !== undefined ? Boolean(payload.includeImportCosts) : (existingQuote.include_import_costs ?? existingQuote.includeImportCosts ?? false));
       const importCost = incImport ? (payload.total_import_costs !== undefined ? Number(payload.total_import_costs) : (payload.totalImportCosts !== undefined ? Number(payload.totalImportCosts) : Number(existingQuote.total_import_costs ?? existingQuote.totalImportCosts ?? 0))) : 0;
-      const total = afterDiscount + taxAmount + importCost;
+      const total = Number((afterDiscount + taxAmount + importCost).toFixed(2));
 
       const currentUser = auth.currentUser;
       const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "User");
@@ -1093,6 +1225,14 @@ export const quotationService = {
         includeImportCosts: incImport,
         total_import_costs: importCost,
         totalImportCosts: importCost,
+        allowZiGPayments: allowZiG,
+        allow_zig_payments: allowZiG,
+        interbankRate: iRate || undefined,
+        interbank_rate: iRate || undefined,
+        streetRate: sRate || undefined,
+        street_rate: sRate || undefined,
+        calculatedMultiplier: multiplier,
+        calculated_multiplier: multiplier,
         total,
         updatedByUid: userUid,
         updatedByName: userName,

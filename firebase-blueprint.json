@@ -145,6 +145,10 @@
         "total": { "type": "number" },
         "status": { "type": "string", "maxLength": 32 },
         "notes": { "type": "string", "maxLength": 500 },
+        "allowZiGPayments": { "type": "boolean" },
+        "interbankRate": { "type": "number" },
+        "streetRate": { "type": "number" },
+        "calculatedMultiplier": { "type": "number" },
         "createdAt": { "type": "string" }
       },
       "required": ["id", "businessId", "quotationNumber", "customerId", "total", "status"]

@@ -428,8 +428,17 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
                 </p>
                 <p><span className="text-slate-500 font-bold">Bank:</span> {bankName}</p>
                 <p><span className="text-slate-500 font-bold">Account Name:</span> {accountName}</p>
-                <p><span className="text-slate-500 font-bold">RTGS:</span> <strong className="text-slate-900 font-mono">{rtgsAccountNumber}</strong></p>
+                {(!isQuotation || Boolean(quoteData?.allowZiGPayments ?? quoteData?.allow_zig_payments)) && (
+                  <p><span className="text-slate-500 font-bold">RTGS:</span> <strong className="text-slate-900 font-mono">{rtgsAccountNumber}</strong></p>
+                )}
                 <p><span className="text-slate-500 font-bold">USD:</span> <strong className="text-slate-900 font-mono">{usdAccountNumber}</strong></p>
+                {isQuotation && (
+                  <div className={`mt-2 font-bold text-[10px] ${Boolean(quoteData?.allowZiGPayments ?? quoteData?.allow_zig_payments) ? 'text-blue-700' : 'text-amber-700'}`}>
+                    {Boolean(quoteData?.allowZiGPayments ?? quoteData?.allow_zig_payments)
+                      ? 'Payment Notice: USD & ZiG payments accepted.' 
+                      : 'Payment Notice: Payments accepted in USD only.'}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1 font-mono sm:text-right">

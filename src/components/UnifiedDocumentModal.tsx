@@ -584,10 +584,17 @@ export const UnifiedDocumentModal: React.FC<UnifiedDocumentModalProps> = ({
                   <div className="space-y-1 text-slate-700 font-mono text-[11px]">
                     <p><span className="font-bold text-slate-900">Bank:</span> {bankName}</p>
                     <p><span className="font-bold text-slate-900">Account Name:</span> {accountName}</p>
-                    <p><span className="font-bold text-slate-900">RTGS:</span> <span className="font-bold text-slate-900">{rtgsAccountNumber}</span></p>
+                    {(normDoc.docType !== "quotation" || normDoc.allowZiGPayments) && (
+                      <p><span className="font-bold text-slate-900">RTGS:</span> <span className="font-bold text-slate-900">{rtgsAccountNumber}</span></p>
+                    )}
                     <p><span className="font-bold text-slate-900">USD:</span> <span className="font-bold text-slate-900">{usdAccountNumber}</span></p>
                     {ecocashNumber && (
                       <p><span className="font-bold text-slate-900">EcoCash Number:</span> <span className="font-bold text-slate-900">{ecocashNumber}</span></p>
+                    )}
+                    {normDoc.docType === "quotation" && (
+                      <div className={`mt-2 pt-1 border-t border-slate-200/80 font-bold ${normDoc.allowZiGPayments ? 'text-blue-700' : 'text-amber-700'}`}>
+                        {normDoc.allowZiGPayments ? 'Payment Notice: USD & ZiG payments accepted.' : 'Payment Notice: Payments accepted in USD only.'}
+                      </div>
                     )}
                   </div>
                   {normDoc.notes && (

@@ -52,9 +52,12 @@ interface User {
 interface QuotationLine {
   productId: string;
   productName: string;
+  sku?: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  baseUnitPrice?: number;
+  base_unit_price?: number;
 }
 
 interface Quotation {
@@ -82,6 +85,17 @@ interface Quotation {
   includeImportCosts?: boolean;
   total_import_costs?: number;
   totalImportCosts?: number;
+  allowZiGPayments?: boolean;
+  allow_zig_payments?: boolean;
+  interbankRate?: number;
+  interbank_rate?: number;
+  streetRate?: number;
+  street_rate?: number;
+  calculatedMultiplier?: number;
+  calculated_multiplier?: number;
+  isConverted?: boolean;
+  convertedInvoiceId?: string;
+  convertedInvoiceNumber?: string;
 }
 
 interface ReceiptLine {
@@ -1274,33 +1288,47 @@ app.delete("/api/v1/suppliers/:id", (req, res) => {
 
 // --- ARITHMETIC / BILLING ENDPOINTS (MANDATORY EXCLUSIVE SERVER REQ) ---
 function calculateCartTotals(
-  items: Array<{ productId: string; quantity: number }>, 
+  items: Array<{ productId: string; quantity: number; unitPrice?: number }>, 
   discountRate: number, 
   products: Product[],
   taxRateInput?: number | string | null,
   companySettings?: CompanySettings,
   includeImportCostsInput?: boolean,
-  totalImportCostsInput?: number
+  totalImportCostsInput?: number,
+  allowZiGPaymentsInput?: boolean,
+  interbankRateInput?: number,
+  streetRateInput?: number
 ) {
+  const allowZiG = Boolean(allowZiGPaymentsInput);
+  const iRate = Number(interbankRateInput || 0);
+  const sRate = Number(streetRateInput || 0);
+
+  let multiplier = 1.0;
+  if (allowZiG && iRate > 0 && sRate > 0) {
+    const adjustmentFactor = sRate / iRate;
+    multiplier = Math.ceil(adjustmentFactor * 10) / 10;
+  }
+
   let taxRate = 0;
   const lines: any[] = [];
   let subtotal = 0;
 
   for (const item of items) {
     const originalProd = products.find(p => p.id === item.productId);
-    if (!originalProd) continue;
-
-    const unitPrice = originalProd.sellingPrice;
+    const basePrice = originalProd ? originalProd.sellingPrice : (item.unitPrice !== undefined ? Number(item.unitPrice) : 100);
+    const adjustedUnitPrice = multiplier > 1 ? Number((basePrice * multiplier).toFixed(2)) : basePrice;
     const qty = Number(item.quantity);
-    const totalPrice = unitPrice * qty;
+    const totalPrice = Number((adjustedUnitPrice * qty).toFixed(2));
     subtotal += totalPrice;
 
     lines.push({
-      productId: originalProd.id,
-      productName: originalProd.name,
+      productId: originalProd ? originalProd.id : item.productId,
+      productName: originalProd ? originalProd.name : "Product",
+      sku: originalProd?.sku || "",
       quantity: qty,
-      unitPrice,
-      totalPrice
+      unitPrice: adjustedUnitPrice,
+      totalPrice,
+      baseUnitPrice: basePrice
     });
   }
 
@@ -1322,6 +1350,14 @@ function calculateCartTotals(
     includeImportCosts: incImport,
     total_import_costs: importCost,
     totalImportCosts: importCost,
+    allowZiGPayments: allowZiG,
+    allow_zig_payments: allowZiG,
+    interbankRate: iRate || undefined,
+    interbank_rate: iRate || undefined,
+    streetRate: sRate || undefined,
+    street_rate: sRate || undefined,
+    calculatedMultiplier: multiplier,
+    calculated_multiplier: multiplier,
     total
   };
 }
@@ -1340,7 +1376,13 @@ app.post("/api/v1/quotations/calculate", (req, res) => {
     include_import_costs, 
     includeImportCosts, 
     total_import_costs, 
-    totalImportCosts 
+    totalImportCosts,
+    allowZiGPayments,
+    allow_zig_payments,
+    interbankRate,
+    interbank_rate,
+    streetRate,
+    street_rate
   } = req.body;
   if (!items || !Array.isArray(items)) {
     return res.status(400).json({ error: "items array is required" });
@@ -1348,7 +1390,22 @@ app.post("/api/v1/quotations/calculate", (req, res) => {
   const db = getDb();
   const incImport = Boolean(include_import_costs ?? includeImportCosts);
   const importCost = Number(total_import_costs ?? totalImportCosts ?? 0);
-  const result = calculateCartTotals(items, Number(discountRate || 0), db.products, taxRate, db.companySettings, incImport, importCost);
+  const allowZiG = Boolean(allowZiGPayments ?? allow_zig_payments);
+  const iRate = Number(interbankRate ?? interbank_rate ?? 0);
+  const sRate = Number(streetRate ?? street_rate ?? 0);
+
+  const result = calculateCartTotals(
+    items, 
+    Number(discountRate || 0), 
+    db.products, 
+    taxRate, 
+    db.companySettings, 
+    incImport, 
+    importCost,
+    allowZiG,
+    iRate,
+    sRate
+  );
   res.json(result);
 });
 
@@ -1366,7 +1423,13 @@ app.post("/api/v1/quotations", (req, res) => {
     include_import_costs,
     includeImportCosts,
     total_import_costs,
-    totalImportCosts
+    totalImportCosts,
+    allowZiGPayments,
+    allow_zig_payments,
+    interbankRate,
+    interbank_rate,
+    streetRate,
+    street_rate
   } = req.body;
   if (!customerId || !items || !Array.isArray(items)) {
     return res.status(400).json({ error: "customerId and items are required" });
@@ -1378,8 +1441,22 @@ app.post("/api/v1/quotations", (req, res) => {
   const incTerms = Boolean(include_terms_conditions ?? includeTermsConditions);
   const incImport = Boolean(include_import_costs ?? includeImportCosts);
   const importCost = incImport ? Number(total_import_costs ?? totalImportCosts ?? 0) : 0;
+  const allowZiG = Boolean(allowZiGPayments ?? allow_zig_payments);
+  const iRate = Number(interbankRate ?? interbank_rate ?? 0);
+  const sRate = Number(streetRate ?? street_rate ?? 0);
 
-  const calculated = calculateCartTotals(items, Number(discountRate || 0), db.products, taxRate, db.companySettings, incImport, importCost);
+  const calculated = calculateCartTotals(
+    items, 
+    Number(discountRate || 0), 
+    db.products, 
+    taxRate, 
+    db.companySettings, 
+    incImport, 
+    importCost,
+    allowZiG,
+    iRate,
+    sRate
+  );
 
   const newQuote: Quotation = {
     id: `qt-${Date.now()}`,
@@ -1404,6 +1481,14 @@ app.post("/api/v1/quotations", (req, res) => {
     includeImportCosts: incImport,
     total_import_costs: importCost,
     totalImportCosts: importCost,
+    allowZiGPayments: allowZiG,
+    allow_zig_payments: allowZiG,
+    interbankRate: iRate || undefined,
+    interbank_rate: iRate || undefined,
+    streetRate: sRate || undefined,
+    street_rate: sRate || undefined,
+    calculatedMultiplier: calculated.calculatedMultiplier,
+    calculated_multiplier: calculated.calculatedMultiplier,
     status: status || "Draft",
     notes: notes || ""
   };
@@ -1437,7 +1522,13 @@ app.put("/api/v1/quotations/:id", (req, res) => {
     include_import_costs,
     includeImportCosts,
     total_import_costs,
-    totalImportCosts
+    totalImportCosts,
+    allowZiGPayments,
+    allow_zig_payments,
+    interbankRate,
+    interbank_rate,
+    streetRate,
+    street_rate
   } = req.body;
   const original = db.quotations[index];
 
@@ -1459,15 +1550,45 @@ app.put("/api/v1/quotations/:id", (req, res) => {
   const incImport = include_import_costs !== undefined ? Boolean(include_import_costs) : (includeImportCosts !== undefined ? Boolean(includeImportCosts) : (original.include_import_costs ?? original.includeImportCosts ?? false));
   const importCost = incImport ? (total_import_costs !== undefined ? Number(total_import_costs) : (totalImportCosts !== undefined ? Number(totalImportCosts) : Number(original.total_import_costs ?? original.totalImportCosts ?? 0))) : 0;
 
+  const allowZiG = allowZiGPayments !== undefined ? Boolean(allowZiGPayments) : (allow_zig_payments !== undefined ? Boolean(allow_zig_payments) : Boolean(original.allowZiGPayments ?? original.allow_zig_payments));
+  const iRate = interbankRate !== undefined ? Number(interbankRate) : (interbank_rate !== undefined ? Number(interbank_rate) : Number(original.interbankRate ?? original.interbank_rate ?? 0));
+  const sRate = streetRate !== undefined ? Number(streetRate) : (street_rate !== undefined ? Number(street_rate) : Number(original.streetRate ?? original.street_rate ?? 0));
+
   const effectiveTaxRate = taxRate !== undefined ? taxRate : original.taxRate;
   const effectiveDiscountRate = discountRate !== undefined ? Number(discountRate) : original.discountRate;
 
   let calculated: any;
   if (items && Array.isArray(items)) {
-    calculated = calculateCartTotals(items, effectiveDiscountRate, db.products, effectiveTaxRate, db.companySettings, incImport, importCost);
+    calculated = calculateCartTotals(
+      items, 
+      effectiveDiscountRate, 
+      db.products, 
+      effectiveTaxRate, 
+      db.companySettings, 
+      incImport, 
+      importCost,
+      allowZiG,
+      iRate,
+      sRate
+    );
   } else {
-    const standardInputItems = original.lines.map(l => ({ productId: l.productId, quantity: l.quantity }));
-    calculated = calculateCartTotals(standardInputItems, effectiveDiscountRate, db.products, effectiveTaxRate, db.companySettings, incImport, importCost);
+    const standardInputItems = original.lines.map(l => ({ 
+      productId: l.productId, 
+      quantity: l.quantity, 
+      unitPrice: l.baseUnitPrice ?? l.unitPrice 
+    }));
+    calculated = calculateCartTotals(
+      standardInputItems, 
+      effectiveDiscountRate, 
+      db.products, 
+      effectiveTaxRate, 
+      db.companySettings, 
+      incImport, 
+      importCost,
+      allowZiG,
+      iRate,
+      sRate
+    );
   }
 
   db.quotations[index] = {
@@ -1481,6 +1602,14 @@ app.put("/api/v1/quotations/:id", (req, res) => {
     includeImportCosts: incImport,
     total_import_costs: importCost,
     totalImportCosts: importCost,
+    allowZiGPayments: allowZiG,
+    allow_zig_payments: allowZiG,
+    interbankRate: iRate || undefined,
+    interbank_rate: iRate || undefined,
+    streetRate: sRate || undefined,
+    street_rate: sRate || undefined,
+    calculatedMultiplier: calculated.calculatedMultiplier,
+    calculated_multiplier: calculated.calculatedMultiplier,
     ...calculated
   };
 
@@ -2684,7 +2813,7 @@ app.post("/api/v1/gemini/assist", async (req, res) => {
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         systemInstruction,
@@ -2759,9 +2888,9 @@ Return ONLY valid JSON with NO markdown tags or extra output wrapping according 
   ]
 }`;
 
-      // Call Gemini 3.6 Flash multimodal model
+      // Call Gemini 2.5 Flash multimodal model
       const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-2.5-flash",
         contents: [
           {
             inlineData: {

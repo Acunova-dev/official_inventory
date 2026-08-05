@@ -72,6 +72,8 @@ export interface NormalizedPrintDocument {
   terms_and_conditions?: Array<TermClause> | string;
   include_import_costs?: boolean;
   total_import_costs?: number;
+  allowZiGPayments?: boolean;
+  paymentTermsNotice?: string;
 
   // Authorization / Signatures
   preparedBy?: string;
@@ -378,6 +380,7 @@ export function normalizeDocument(
       const incTerms = Boolean(q.include_terms_conditions ?? q.includeTermsConditions);
       const incImport = Boolean(q.include_import_costs ?? q.includeImportCosts);
       const importCost = incImport ? Number(q.total_import_costs ?? q.totalImportCosts ?? 0) : 0;
+      const allowZiG = Boolean(q.allowZiGPayments ?? q.allow_zig_payments);
 
       return {
         docType: "quotation",
@@ -411,6 +414,8 @@ export function normalizeDocument(
         include_terms_conditions: incTerms,
         include_import_costs: incImport,
         total_import_costs: importCost,
+        allowZiGPayments: allowZiG,
+        paymentTermsNotice: allowZiG ? "USD & ZiG payments accepted" : "Payments accepted in USD only.",
         preparedBy: "Sales Department",
         notes: q.notes
       };

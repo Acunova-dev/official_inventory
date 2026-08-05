@@ -464,12 +464,18 @@ export class PdfFlowEngine {
     const summaryX = this.pageWidth - this.rightMargin - summaryWidth;
 
     // Banking details lines measurement
+    const isQuote = normDoc.docType === "quotation";
+    const allowZiG = Boolean(normDoc.allowZiGPayments);
+    const showRtgs = !isQuote || allowZiG;
+
     const rtgsAcc = this.settings.rtgsAccountNumber || this.settings.accountNumber || "0112458920101";
     const usdAcc = this.settings.usdAccountNumber || this.settings.accountNumber || "9140001827461";
 
-    let leftLinesCount = 5;
+    let leftLinesCount = 3; // Bank, Account Name, USD Account
+    if (showRtgs) leftLinesCount++;
     if (this.settings.ecocashNumber) leftLinesCount++;
     if (normDoc.paymentMethod) leftLinesCount++;
+    if (isQuote) leftLinesCount++; // Payment Notice
     const leftHeight = 6 + (leftLinesCount * 4.2);
 
     // Totals lines measurement
@@ -500,8 +506,10 @@ export class PdfFlowEngine {
     bankCurY += 4.0;
     this.doc.text(`Account Name: ${this.settings.accountName || this.settings.companyName}`, this.leftMargin, bankCurY);
     bankCurY += 4.0;
-    this.doc.text(`RTGS Account: ${rtgsAcc}`, this.leftMargin, bankCurY);
-    bankCurY += 4.0;
+    if (showRtgs) {
+      this.doc.text(`RTGS Account: ${rtgsAcc}`, this.leftMargin, bankCurY);
+      bankCurY += 4.0;
+    }
     this.doc.text(`USD Account: ${usdAcc}`, this.leftMargin, bankCurY);
     bankCurY += 4.0;
     if (this.settings.ecocashNumber) {
@@ -510,6 +518,20 @@ export class PdfFlowEngine {
     }
     if (normDoc.paymentMethod) {
       this.doc.text(`Payment Method: ${normDoc.paymentMethod}`, this.leftMargin, bankCurY);
+      bankCurY += 4.0;
+    }
+    if (isQuote) {
+      this.doc.setFont("helvetica", "bold");
+      this.doc.setTextColor(allowZiG ? 30 : 180, allowZiG ? 64 : 83, allowZiG ? 175 : 9); // blue or amber
+      this.doc.text(
+        allowZiG 
+          ? "Payment Notice: USD & ZiG payments accepted." 
+          : "Payment Notice: Payments accepted in USD only.", 
+        this.leftMargin, 
+        bankCurY
+      );
+      this.doc.setFont("helvetica", "normal");
+      this.doc.setTextColor(15, 23, 42);
     }
 
     // --- Right Column: Financial Totals Summary ---
