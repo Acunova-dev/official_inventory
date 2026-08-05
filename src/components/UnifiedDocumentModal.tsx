@@ -652,38 +652,13 @@ export const UnifiedDocumentModal: React.FC<UnifiedDocumentModalProps> = ({
                 </div>
               )}
 
-              {/* Authorization & Signatures Grid */}
-              <div className="pt-6 border-t border-slate-200">
-                <div className="grid grid-cols-3 gap-6 text-center font-mono">
-                  <div className="space-y-6">
-                    <div className="h-10 border-b border-slate-400 border-dashed flex items-end justify-center pb-1">
-                      <span className="text-[11px] font-bold text-slate-800">{normDoc.preparedBy || "System User"}</span>
-                    </div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">PREPARED / ISSUED BY</p>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div className="h-10 border-b border-slate-400 border-dashed flex items-end justify-center pb-1">
-                      <span className="text-[11px] font-bold text-slate-800">{normDoc.approvedBy || "Authorized Manager"}</span>
-                    </div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">APPROVED & STAMPED BY</p>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div className="h-10 border-b border-slate-400 border-dashed flex items-end justify-center pb-1">
-                      <span className="text-[11px] font-bold text-slate-800">{normDoc.receivedBy || "Client / Receiver Sign"}</span>
-                    </div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">RECEIVED / ACKNOWLEDGED BY</p>
-                  </div>
-                </div>
-              </div>
+             
 
               {/* Security Watermark & Footer Terms */}
               <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-500 font-mono">
                 <div className="flex items-center gap-2">
                   <QrCode size={28} className="text-slate-800 shrink-0" />
                   <div className="space-y-0.5">
-                    <p className="font-bold text-slate-700 uppercase">VOLT SECURITY STAMP: VERIFIED</p>
                     <p>{footerTerms}</p>
                   </div>
                 </div>
