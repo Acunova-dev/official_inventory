@@ -628,21 +628,27 @@ export const UnifiedDocumentModal: React.FC<UnifiedDocumentModalProps> = ({
                 </div>
               </div>
 
-              {/* Terms & Conditions Section (When enabled for Quotations) */}
-              {normDoc.include_terms_conditions && (
+              {/* Terms & Conditions Section (When enabled for Quotations or present in document) */}
+              {(normDoc.include_terms_conditions || normDoc.terms_and_conditions) && (
                 <div className="pt-5 border-t border-slate-200 space-y-3">
                   <div className="flex items-center gap-2 pb-1.5 border-b border-slate-200">
                     <FileText size={14} className="text-blue-600" />
                     <h5 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider">Terms & Conditions</h5>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-slate-600 leading-relaxed font-sans">
-                    {QUOTATION_TERMS_AND_CONDITIONS.map((clause, idx) => (
-                      <div key={idx} className="space-y-0.5 bg-slate-50/70 p-2.5 rounded-lg border border-slate-200/60">
-                        <p className="font-bold text-slate-800 text-[10px]">{clause.title}</p>
-                        <p className="text-slate-600 text-[9.5px] leading-relaxed">{clause.content}</p>
-                      </div>
-                    ))}
-                  </div>
+                  {typeof normDoc.terms_and_conditions === "string" ? (
+                    <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/60 text-[10px] text-slate-600 leading-relaxed font-sans whitespace-pre-line">
+                      {normDoc.terms_and_conditions}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-slate-600 leading-relaxed font-sans">
+                      {(Array.isArray(normDoc.terms_and_conditions) ? normDoc.terms_and_conditions : QUOTATION_TERMS_AND_CONDITIONS).map((clause, idx) => (
+                        <div key={idx} className="space-y-0.5 bg-slate-50/70 p-2.5 rounded-lg border border-slate-200/60">
+                          <p className="font-bold text-slate-800 text-[10px]">{clause.title}</p>
+                          <p className="text-slate-600 text-[9.5px] leading-relaxed">{clause.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

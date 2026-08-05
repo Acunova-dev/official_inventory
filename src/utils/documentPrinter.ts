@@ -13,7 +13,8 @@ import {
   Product
 } from "../types";
 import { DEFAULT_COMPANY_SETTINGS, getMergedCompanySettings } from "../constants/defaultSettings";
-import { QUOTATION_TERMS_AND_CONDITIONS } from "../constants/termsAndConditions";
+import { QUOTATION_TERMS_AND_CONDITIONS, TermClause } from "../constants/termsAndConditions";
+import { PdfFlowEngine } from "./pdfLayoutEngine";
 
 export type SupportedDocumentType = 
   | "po" 
@@ -66,8 +67,9 @@ export interface NormalizedPrintDocument {
   paymentMethod?: string;
   bankAccountName?: string;
   
-  // Quotation specific configuration
+  // Quotation and Document specific configuration & terms
   include_terms_conditions?: boolean;
+  terms_and_conditions?: Array<TermClause> | string;
   include_import_costs?: boolean;
   total_import_costs?: number;
 
@@ -454,10 +456,11 @@ export function normalizeDocument(
         currency,
         subtotal: inv.subtotal,
         discountAmount: inv.discountAmount || 0,
-        taxAmount: 0,
+        taxAmount: inv.taxAmount || 0,
         totalAmount: inv.total,
         preparedBy: inv.createdByName || "Accounts Department",
-        notes: [inv.notes, inv.termsAndConditions].filter(Boolean).join("\n\nTerms & Conditions: ")
+        notes: inv.notes,
+        terms_and_conditions: inv.termsAndConditions
       };
     }
 
@@ -516,7 +519,8 @@ async function getBase64ImageFromUrl(url: string | undefined): Promise<string | 
 }
 
 /**
- * Programmatically generates a vector PDF Blob using jsPDF and the merged company settings.
+ * Programmatically generates a vector PDF Blob using PdfFlowEngine and the merged company settings.
+ * Fully content-driven flow layout preventing any overlapping sections.
  */
 export async function generatePdfBlob(
   normDoc: NormalizedPrintDocument,
@@ -527,456 +531,54 @@ export async function generatePdfBlob(
   const paperSize = options?.paperSize || "a4";
   const orientation = options?.orientation || "portrait";
 
-  console.log("[PDF Generator] Building PDF with data:", {
-    documentNumber: normDoc.documentNumber,
-    docType: normDoc.docType,
-    companyName: settings.companyName,
-    paperSize,
-    orientation
-  });
+  const engine = new PdfFlowEngine(settings, { paperSize, orientation });
 
-  const doc = new jsPDF({
-    orientation: paperSize === "thermal" ? "portrait" : orientation,
-    unit: "mm",
-    format: paperSize === "thermal" ? [80, 200] : paperSize
-  });
-
-  const primaryColor = settings.pdfHeaderColor || "#2563eb";
-
-  // Parse hex color to RGB
-  const hexToRgb = (hex: string) => {
-    let clean = hex.replace("#", "");
-    if (clean.length === 3) clean = clean.split("").map(c => c + c).join("");
-    const num = parseInt(clean, 16);
-    return {
-      r: (num >> 16) & 255,
-      g: (num >> 8) & 255,
-      b: num & 255
-    };
-  };
-
-  const rgb = hexToRgb(primaryColor);
-
-  // Thermal 80mm format
+  // 1. Thermal roll format handling
   if (paperSize === "thermal") {
-    let y = 10;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text(settings.companyName.toUpperCase(), 40, y, { align: "center" });
-    y += 5;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text(`${settings.streetAddress}, ${settings.city}`, 40, y, { align: "center" });
-    y += 4;
-    doc.text(`TEL: ${settings.phone} | VAT: ${settings.vatNumber}`, 40, y, { align: "center" });
-    y += 6;
-
-    doc.setDrawColor(200, 200, 200);
-    doc.line(5, y, 75, y);
-    y += 5;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text(normDoc.title, 40, y, { align: "center" });
-    y += 5;
-
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Doc #: ${normDoc.documentNumber}`, 5, y);
-    doc.text(`Date: ${normDoc.date}`, 45, y);
-    y += 4;
-    doc.text(`Party: ${normDoc.partyName}`, 5, y);
-    y += 6;
-
-    doc.line(5, y, 75, y);
-    y += 5;
-
-    doc.setFont("helvetica", "bold");
-    doc.text("ITEM / QTY", 5, y);
-    doc.text(`TOTAL (${normDoc.currency})`, 75, y, { align: "right" });
-    y += 4;
-
-    doc.setFont("helvetica", "normal");
-    normDoc.lines.forEach(line => {
-      doc.text(line.description.substring(0, 22), 5, y);
-      doc.text(line.total.toFixed(2), 75, y, { align: "right" });
-      y += 4;
-      doc.text(` ${line.quantity} x ${line.unitCostOrPrice.toFixed(2)}`, 5, y);
-      y += 4;
-    });
-
-    doc.line(5, y, 75, y);
-    y += 5;
-
-    doc.text(`Subtotal:`, 5, y);
-    doc.text(`${normDoc.currency} ${normDoc.subtotal.toFixed(2)}`, 75, y, { align: "right" });
-    y += 4;
-    if (normDoc.taxAmount > 0) {
-      doc.text(`Tax:`, 5, y);
-      doc.text(`${normDoc.currency} ${normDoc.taxAmount.toFixed(2)}`, 75, y, { align: "right" });
-      y += 4;
-    }
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.text(`TOTAL:`, 5, y);
-    doc.text(`${normDoc.currency} ${normDoc.totalAmount.toFixed(2)}`, 75, y, { align: "right" });
-    y += 8;
-
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
-    doc.text(settings.footerTerms, 40, y, { align: "center", maxWidth: 70 });
-
-    const arrayBuffer = doc.output("arraybuffer");
-    return new Blob([arrayBuffer], { type: "application/pdf" });
+    engine.renderThermalReceipt(normDoc);
+    return engine.toBlob();
   }
 
-  // Standard A4 / A5 / Letter format
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  let y = 15;
-
-  // Header Color Bar
-  doc.setFillColor(rgb.r, rgb.g, rgb.b);
-  doc.rect(0, 0, pageWidth, 5, "F");
-
-  // Logo / Initials Badge
-  const logoBase64 = await getBase64ImageFromUrl(settings.logoUrl);
-  if (logoBase64) {
-    try {
-      doc.addImage(logoBase64, "PNG", 15, y, 24, 16);
-    } catch {
-      doc.setFillColor(rgb.r, rgb.g, rgb.b);
-      doc.roundedRect(15, y, 16, 16, 2, 2, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(12);
-      doc.text(settings.logoInitials || "AI", 23, y + 10, { align: "center" });
-    }
-  } else {
-    doc.setFillColor(rgb.r, rgb.g, rgb.b);
-    doc.roundedRect(15, y, 16, 16, 2, 2, "F");
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text(settings.logoInitials || "AI", 23, y + 10, { align: "center" });
+  // 2. Preload logo for standard vector pages
+  let logoBase64: string | null = null;
+  if (settings.logoUrl) {
+    logoBase64 = await getBase64ImageFromUrl(settings.logoUrl);
   }
 
-  // Company Name & Subtitle
-  const headerX = 45;
-  doc.setTextColor(15, 23, 42); // slate-900
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text(settings.companyName.toUpperCase(), headerX, y + 5);
+  // 3. Document Header Block (Color bar, logo/badge, company details, title, metadata)
+  engine.renderHeaderBlock(normDoc, logoBase64);
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(71, 85, 105); // slate-600
-  doc.text(settings.tagline || settings.companySubtitle, headerX, y + 10);
+  // 4. Party Details Box (Left) & Metadata Key-Values Box (Right)
+  engine.renderPartyAndMetadata(normDoc);
 
-  doc.setFontSize(8);
-  doc.text(`${settings.streetAddress}, ${settings.city}, ${settings.country}`, headerX, y + 15);
-  doc.text(`Tel: ${settings.phone} | Email: ${settings.email}`, headerX, y + 19);
-  doc.text(`TIN: ${settings.tinNumber}`, headerX, y + 23);
+  // 5. Itemized Table (Dynamic row height, wrapped text, headers on multi-page breaks)
+  engine.renderLineItemsTable(normDoc);
 
-  // Document Title & Number (Right Side)
-  const rightX = pageWidth - 15;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(rgb.r, rgb.g, rgb.b);
-  doc.text(normDoc.title, rightX, y + 5, { align: "right" });
+  // 6. Bank Settlement Details (Left) & Totals Breakdown Summary (Right)
+  engine.renderSettlementAndTotals(normDoc);
 
-  doc.setFontSize(10);
-  doc.setTextColor(15, 23, 42);
-  doc.text(`Doc #: ${normDoc.documentNumber}`, rightX, y + 11, { align: "right" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(100, 116, 139);
-  doc.text(`Date: ${normDoc.date}`, rightX, y + 16, { align: "right" });
-  doc.text(`Status: ${normDoc.status}`, rightX, y + 21, { align: "right" });
-
-  y += 32;
-
-  // Divider line
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.4);
-  doc.line(15, y, pageWidth - 15, y);
-  y += 6;
-
-  // Customer / Party Box & Metadata Box
-  const partyBoxWidth = (pageWidth - 36) / 2;
-  const leftX = 15;
-  const metaX = leftX + partyBoxWidth + 6;
-
-  // Split and wrap party address cleanly to prevent overflowing into adjacent columns
-  const addressLines: string[] = normDoc.partyAddress 
-    ? doc.splitTextToSize(normDoc.partyAddress, partyBoxWidth - 8)
-    : [];
-  const maxAddressLines = addressLines.slice(0, 3);
-  
-  // Calculate dynamic box height for party and meta fields
-  const dynamicBoxHeight = Math.max(26, 14 + (maxAddressLines.length * 3.6) + (normDoc.partyPhone ? 3.6 : 0) + (normDoc.partyEmail ? 3.6 : 0) + 2);
-  const boxHeight = Math.min(dynamicBoxHeight, 38);
-
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(leftX, y, partyBoxWidth, boxHeight, 2, 2, "F");
-  doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(leftX, y, partyBoxWidth, boxHeight, 2, 2, "S");
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(100, 116, 139);
-  doc.text(normDoc.partyLabel, leftX + 3, y + 4.5);
-  doc.setFontSize(9.5);
-  doc.setTextColor(15, 23, 42);
-  const partyNameLines = doc.splitTextToSize(normDoc.partyName || "N/A", partyBoxWidth - 6);
-  doc.text(partyNameLines[0] || "N/A", leftX + 3, y + 9);
-  
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(71, 85, 105);
-  let partyY = y + 13;
-  
-  maxAddressLines.forEach(lineText => {
-    doc.text(lineText, leftX + 3, partyY);
-    partyY += 3.6;
-  });
-  
-  if (normDoc.partyPhone && partyY < y + boxHeight - 2) {
-    doc.text(`Phone: ${normDoc.partyPhone}`.substring(0, 35), leftX + 3, partyY);
-    partyY += 3.6;
-  }
-  if (normDoc.partyEmail && partyY < y + boxHeight - 2) {
-    doc.text(`Email: ${normDoc.partyEmail}`.substring(0, 35), leftX + 3, partyY);
+  // 7. Transaction Reversal Reason (when present)
+  if (normDoc.reversalReason) {
+    engine.renderNotesBlock(normDoc.reversalReason, "TRANSACTION REVERSAL REASON");
   }
 
-  // Meta Fields Box (Right)
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(metaX, y, partyBoxWidth, boxHeight, 2, 2, "F");
-  doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(metaX, y, partyBoxWidth, boxHeight, 2, 2, "S");
-
-  let metaY = y + 5;
-  normDoc.metaFields.slice(0, 4).forEach(meta => {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`${meta.label}:`, metaX + 3, metaY);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(15, 23, 42);
-    const metaValTrunc = String(meta.value).substring(0, 24);
-    doc.text(metaValTrunc, metaX + partyBoxWidth - 4, metaY, { align: "right" });
-    metaY += 5.2;
-  });
-
-  y += boxHeight + 4;
-
-  // Table Header
-  const drawTableHeader = (atY: number) => {
-    doc.setFillColor(rgb.r, rgb.g, rgb.b);
-    doc.rect(15, atY, pageWidth - 30, 7, "F");
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(255, 255, 255);
-    doc.text("CODE", 18, atY + 5);
-    doc.text("DESCRIPTION", 46, atY + 5);
-    doc.text("QTY", 132, atY + 5, { align: "right" });
-    doc.text(`PRICE (${normDoc.currency})`, 162, atY + 5, { align: "right" });
-    doc.text(`EXT (${normDoc.currency})`, 192, atY + 5, { align: "right" });
-  };
-
-  drawTableHeader(y);
-  y += 7;
-
-  // Table Lines with dynamic row height and column-bound text wrapping
-  const codeColWidth = 26;
-  const descColWidth = 68;
-
-  normDoc.lines.forEach((line, idx) => {
-    const rawCode = line.codeOrSku || `ITEM-${idx + 1}`;
-    const codeLines = doc.splitTextToSize(rawCode, codeColWidth);
-
-    const rawDesc = line.description || "Line Item";
-    const descLines = doc.splitTextToSize(rawDesc, descColWidth);
-    const remarksLines = line.remarks ? doc.splitTextToSize(`Note: ${line.remarks}`, descColWidth) : [];
-
-    const maxLineCount = Math.max(codeLines.length, descLines.length + remarksLines.length, 1);
-    const rowHeight = Math.max(7, maxLineCount * 3.8 + 3.2);
-
-    // Multi-page check
-    if (y + rowHeight > pageHeight - 45) {
-      doc.addPage();
-      y = 15;
-      drawTableHeader(y);
-      y += 7;
-    }
-
-    if (idx % 2 === 1) {
-      doc.setFillColor(248, 250, 252);
-      doc.rect(15, y, pageWidth - 30, rowHeight, "F");
-    }
-
-    // Draw borders for clean row separation
-    doc.setDrawColor(241, 245, 249);
-    doc.setLineWidth(0.2);
-    doc.line(15, y + rowHeight, pageWidth - 15, y + rowHeight);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(15, 23, 42);
-
-    // Render wrapped Item Code
-    codeLines.forEach((cLine: string, cIdx: number) => {
-      doc.text(cLine, 18, y + 4.5 + (cIdx * 3.6));
-    });
-
-    // Render wrapped Description
-    let curDescY = y + 4.5;
-    descLines.forEach((dLine: string) => {
-      doc.text(dLine, 46, curDescY);
-      curDescY += 3.6;
-    });
-
-    // Render remarks if any
-    if (remarksLines.length > 0) {
-      doc.setFont("helvetica", "italic");
-      doc.setFontSize(7.5);
-      doc.setTextColor(100, 116, 139);
-      remarksLines.forEach((rLine: string) => {
-        doc.text(rLine, 46, curDescY);
-        curDescY += 3.2;
-      });
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(15, 23, 42);
-    }
-
-    // Render numerical columns aligned strictly inside their boundaries
-    doc.text(line.quantity.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }), 132, y + 4.5, { align: "right" });
-    doc.text(line.unitCostOrPrice.toFixed(2), 162, y + 4.5, { align: "right" });
-    doc.setFont("helvetica", "bold");
-    doc.text(line.total.toFixed(2), 192, y + 4.5, { align: "right" });
-    doc.setFont("helvetica", "normal");
-
-    y += rowHeight;
-  });
-
-  y += 4;
-  doc.setDrawColor(226, 232, 240);
-  doc.line(15, y, pageWidth - 15, y);
-  y += 6;
-
-  // Bank Info & Summary
-  const summaryWidth = 72;
-  const summaryX = pageWidth - 15 - summaryWidth;
-
-  // Banking Details (Left) - Structured with RTGS, USD, and EcoCash Number
-  const rtgsAcc = settings.rtgsAccountNumber || settings.accountNumber || "0112458920101";
-  const usdAcc = settings.usdAccountNumber || settings.accountNumber || "9140001827461";
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text("BANK SETTLEMENT DETAILS", 15, y);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(15, 23, 42);
-  doc.text(`Bank: ${settings.bankName || "Stanbic Bank Bulawayo"}`, 15, y + 4.5);
-  doc.text(`Account Name: ${settings.accountName || settings.companyName}`, 15, y + 8.5);
-  doc.text(`RTGS: ${rtgsAcc}`, 15, y + 12.5);
-  doc.text(`USD: ${usdAcc}`, 15, y + 16.5);
-  if (settings.ecocashNumber) {
-    doc.text(`EcoCash Number: ${settings.ecocashNumber}`, 15, y + 20.5);
+  // 8. Notes & Special Instructions (when present)
+  if (normDoc.notes) {
+    engine.renderNotesBlock(normDoc.notes, "NOTES / SPECIAL INSTRUCTIONS");
   }
 
-  // Totals Summary (Right)
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.text(`Subtotal:`, summaryX, y);
-  doc.text(`${normDoc.currency} ${normDoc.subtotal.toFixed(2)}`, pageWidth - 18, y, { align: "right" });
-  
-  if (normDoc.discountAmount > 0) {
-    y += 4;
-    doc.text(`Discount:`, summaryX, y);
-    doc.text(`-${normDoc.currency} ${normDoc.discountAmount.toFixed(2)}`, pageWidth - 18, y, { align: "right" });
+  // 9. Terms & Conditions (Flow-driven, variable-height, line-by-line page break protection)
+  if (normDoc.include_terms_conditions || normDoc.terms_and_conditions) {
+    engine.renderTermsAndConditionsBlock(normDoc.terms_and_conditions || normDoc.include_terms_conditions);
   }
 
-  if (normDoc.taxAmount > 0) {
-    y += 4;
-    doc.text(`Tax:`, summaryX, y);
-    doc.text(`${normDoc.currency} ${normDoc.taxAmount.toFixed(2)}`, pageWidth - 18, y, { align: "right" });
-  }
+  // 10. Authorization & Signatures Grid (Prepared By, Approved By, Received By)
+  engine.renderSignaturesBlock(normDoc);
 
-  if (normDoc.include_import_costs && (normDoc.total_import_costs || 0) > 0) {
-    y += 4;
-    doc.text(`Import Costs:`, summaryX, y);
-    doc.text(`${normDoc.currency} ${(normDoc.total_import_costs || 0).toFixed(2)}`, pageWidth - 18, y, { align: "right" });
-  }
+  // 11. Document-wide Footer & Page Numbering Finalizer
+  engine.finalizeDocument();
 
-  y += 6;
-  doc.setFillColor(rgb.r, rgb.g, rgb.b);
-  doc.roundedRect(summaryX - 2, y - 4, summaryWidth + 2, 8, 1, 1, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(255, 255, 255);
-  doc.text(`TOTAL:`, summaryX, y + 1);
-  doc.text(`${normDoc.currency} ${normDoc.totalAmount.toFixed(2)}`, pageWidth - 18, y + 1, { align: "right" });
-
-  y += 12;
-
-  // Render Terms & Conditions if enabled
-  if (normDoc.include_terms_conditions) {
-    if (y + 55 > pageHeight - 20) {
-      doc.addPage();
-      y = 15;
-    }
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(15, 23, 42);
-    doc.text("TERMS & CONDITIONS", 15, y);
-    y += 4;
-
-    QUOTATION_TERMS_AND_CONDITIONS.forEach((clause) => {
-      if (y + 12 > pageHeight - 16) {
-        doc.addPage();
-        y = 15;
-      }
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
-      doc.setTextColor(51, 65, 85);
-      doc.text(clause.title, 15, y);
-      y += 3;
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      doc.setTextColor(71, 85, 105);
-      const clauseLines = doc.splitTextToSize(clause.content, pageWidth - 30);
-      clauseLines.forEach((cLine: string) => {
-        if (y > pageHeight - 14) {
-          doc.addPage();
-          y = 15;
-        }
-        doc.text(cLine, 15, y);
-        y += 2.8;
-      });
-      y += 1.5;
-    });
-  }
-
-  // Footer Disclaimer
-  const footerY = doc.internal.pageSize.getHeight() - 12;
-  doc.setDrawColor(226, 232, 240);
-  doc.line(15, footerY - 4, pageWidth - 15, footerY - 4);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(148, 163, 184);
-  doc.text(settings.footerTerms, pageWidth / 2, footerY, { align: "center" });
-
-  const arrayBuffer = doc.output("arraybuffer");
-  return new Blob([arrayBuffer], { type: "application/pdf" });
+  return engine.toBlob();
 }
 
 /**
@@ -996,20 +598,30 @@ export function downloadPdfBlob(blob: Blob, fileName: string): void {
 }
 
 /**
- * High-level function to export either a DOM element or programmatic PDF,
+ * High-level function to export vector PDF with proper flow layout,
  * verifying binary signature before download.
  */
 export async function exportDocumentToPdf(
   normDoc: NormalizedPrintDocument,
   rawSettings?: Partial<CompanySettings> | null,
   fileName: string = "Document.pdf",
-  options?: { paperSize?: PaperSize; orientation?: PageOrientation },
+  options?: { paperSize?: PaperSize; orientation?: PageOrientation; useDomCapture?: boolean },
   elementId?: string
 ): Promise<void> {
   let blob: Blob | null = null;
   const settings = getMergedCompanySettings(rawSettings);
 
-  if (elementId) {
+  // 1. Primary: Generate pure vector PDF via content-driven PdfFlowEngine
+  if (!options?.useDomCapture) {
+    try {
+      blob = await generatePdfBlob(normDoc, settings, options);
+    } catch (err) {
+      console.warn("[PDF Renderer] Vector engine error, attempting DOM canvas fallback:", err);
+    }
+  }
+
+  // 2. Fallback: If DOM capture is explicitly requested or vector failed
+  if (!blob && elementId) {
     const element = document.getElementById(elementId);
     if (element) {
       try {
@@ -1081,6 +693,7 @@ export async function exportDocumentToPdf(
     }
   }
 
+  // 3. Final Fallback: Guarantee blob creation
   if (!blob) {
     blob = await generatePdfBlob(normDoc, settings, options);
   }
