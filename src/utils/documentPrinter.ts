@@ -382,12 +382,33 @@ export function normalizeDocument(
       const importCost = incImport ? Number(q.total_import_costs ?? q.totalImportCosts ?? 0) : 0;
       const allowZiG = Boolean(q.allowZiGPayments ?? q.allow_zig_payments);
 
+      // Determine customer-facing Date Issued and Valid Until (30 calendar days)
+      const isDraft = q.status === "Draft" && !q.date;
+      const dateIssued = isDraft ? "Draft (Pending Issue)" : (q.date || "Pending Issue");
+
+      let validUntil = "30 Days from date of issue";
+      if (!isDraft && q.date) {
+        if (q.expiryDate) {
+          validUntil = q.expiryDate;
+        } else {
+          try {
+            const d = new Date(q.date);
+            if (!isNaN(d.getTime())) {
+              d.setDate(d.getDate() + 30);
+              validUntil = d.toISOString().split("T")[0];
+            }
+          } catch {
+            validUntil = "30 Days from date of issue";
+          }
+        }
+      }
+
       return {
         docType: "quotation",
         title: "SALES QUOTATION",
         documentNumber: q.quotationNumber,
-        date: q.date,
-        status: q.status || "Active",
+        date: dateIssued,
+        status: q.status || "Draft",
         partyLabel: "CUSTOMER DETAILS",
         partyName: q.customerName,
         partyEmail: q.customerEmail,
@@ -395,8 +416,8 @@ export function normalizeDocument(
         partyAddress: q.customerAddress,
         metaFields: [
           { label: "Quotation #", value: q.quotationNumber },
-          { label: "Date Issued", value: q.date },
-          { label: "Valid Until", value: q.expiryDate || "30 Days from date of issue" }
+          { label: "Date Issued", value: dateIssued },
+          { label: "Valid Until", value: validUntil }
         ],
         lines: (q.lines || []).map((line, idx) => ({
           id: line.productId || `q-line-${idx}`,
@@ -562,25 +583,30 @@ export async function generatePdfBlob(
   // 6. Bank Settlement Details (Left) & Totals Breakdown Summary (Right)
   engine.renderSettlementAndTotals(normDoc);
 
-  // 7. Transaction Reversal Reason (when present)
+  // 7. Quotation Payment Notice (Full-width prominently positioned immediately after Bank Settlement Details, before Terms & Conditions)
+  if (normDoc.docType === "quotation") {
+    engine.renderQuotationPaymentNotice(normDoc);
+  }
+
+  // 8. Transaction Reversal Reason (when present)
   if (normDoc.reversalReason) {
     engine.renderNotesBlock(normDoc.reversalReason, "TRANSACTION REVERSAL REASON");
   }
 
-  // 8. Notes & Special Instructions (when present)
+  // 9. Notes & Special Instructions (when present)
   if (normDoc.notes) {
     engine.renderNotesBlock(normDoc.notes, "NOTES / SPECIAL INSTRUCTIONS");
   }
 
-  // 9. Terms & Conditions (Flow-driven, variable-height, line-by-line page break protection)
+  // 10. Terms & Conditions (Flow-driven, variable-height, line-by-line page break protection)
   if (normDoc.include_terms_conditions || normDoc.terms_and_conditions) {
     engine.renderTermsAndConditionsBlock(normDoc.terms_and_conditions || normDoc.include_terms_conditions);
   }
 
-  // 10. Authorization & Signatures Grid (Prepared By, Approved By, Received By)
+  // 11. Authorization & Signatures Grid (Prepared By, Approved By, Received By)
   engine.renderSignaturesBlock(normDoc);
 
-  // 11. Document-wide Footer & Page Numbering Finalizer
+  // 12. Document-wide Footer & Page Numbering Finalizer
   engine.finalizeDocument();
 
   return engine.toBlob();

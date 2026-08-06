@@ -13,7 +13,8 @@ import {
   Mail, 
   Calendar,
   Sparkles,
-  Phone
+  Phone,
+  AlertCircle
 } from "lucide-react";
 import { Quotation, Receipt } from "../types";
 import { settingsService } from "../services/api";
@@ -83,7 +84,9 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
   const customerEmail = isQuotation ? quoteData?.customerEmail : receiptData?.customerEmail;
   const customerPhone = isQuotation ? quoteData?.customerPhone : receiptData?.customerPhone;
   const customerAddress = isQuotation ? quoteData?.customerAddress : receiptData?.customerAddress;
-  const date = document.data.date;
+  const isDraftQuote = isQuotation && quoteData?.status === "Draft" && !quoteData?.date;
+  const date = isDraftQuote ? "Draft (Pending Issue)" : (document.data.date || "Pending Issue");
+  const expiryDate = (!isDraftQuote && quoteData?.date) ? (quoteData.expiryDate || "30 Days from date of issue") : "30 Days from date of issue";
   const lines = document.data.lines || [];
   const subtotal = document.data.subtotal || 0;
   const taxAmount = document.data.taxAmount || 0;
@@ -303,9 +306,15 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
                   <span className="font-extrabold text-slate-950 truncate">{docNumber}</span>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <span className="text-slate-500 font-bold whitespace-nowrap">Date:</span>
+                  <span className="text-slate-500 font-bold whitespace-nowrap">{isQuotation ? "Date Issued:" : "Date:"}</span>
                   <span>{date}</span>
                 </div>
+                {isQuotation && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-slate-500 font-bold whitespace-nowrap">Valid Until:</span>
+                    <span>{expiryDate}</span>
+                  </div>
+                )}
                 <div className="flex justify-between gap-2">
                   <span className="text-slate-500 font-bold whitespace-nowrap">Sales Type:</span>
                   <span>{salesType}</span>
@@ -405,23 +414,8 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
               </div>
             </div>
 
-            {/* Terms & Conditions (Quotation Only when enabled) */}
-            {isQuotation && (quoteData?.include_terms_conditions || quoteData?.includeTermsConditions) && (
-              <div className="pt-2 border-t border-slate-300 space-y-2">
-                <p className="font-bold text-xs text-slate-900 uppercase tracking-wider">Terms & Conditions</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[9.5px] font-sans text-slate-600 leading-relaxed">
-                  {QUOTATION_TERMS_AND_CONDITIONS.map((clause, idx) => (
-                    <div key={idx} className="bg-slate-50/80 p-2 rounded border border-slate-200/70">
-                      <p className="font-bold text-slate-800 text-[10px]">{clause.title}</p>
-                      <p className="text-slate-600">{clause.content}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Payment & Settlement Details Box */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 text-[11px] text-slate-800 border-t border-slate-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-slate-50/60 rounded-xl text-[11px] text-slate-800 border border-slate-200">
               <div className="space-y-1 font-mono">
                 <p className="font-bold text-slate-900 uppercase text-xs flex items-center gap-1">
                   <Building2 size={13} className="text-blue-700" /> Bank Settlement Details
@@ -432,13 +426,6 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
                   <p><span className="text-slate-500 font-bold">RTGS:</span> <strong className="text-slate-900 font-mono">{rtgsAccountNumber}</strong></p>
                 )}
                 <p><span className="text-slate-500 font-bold">USD:</span> <strong className="text-slate-900 font-mono">{usdAccountNumber}</strong></p>
-                {isQuotation && (
-                  <div className={`mt-2 font-bold text-[10px] ${Boolean(quoteData?.allowZiGPayments ?? quoteData?.allow_zig_payments) ? 'text-blue-700' : 'text-amber-700'}`}>
-                    {Boolean(quoteData?.allowZiGPayments ?? quoteData?.allow_zig_payments)
-                      ? 'Payment Notice: USD & ZiG payments accepted.' 
-                      : 'Payment Notice: Payments accepted in USD only.'}
-                  </div>
-                )}
               </div>
 
               <div className="space-y-1 font-mono sm:text-right">
@@ -455,6 +442,43 @@ export const PdfPreviewModal: React.FC<PdfPreviewModalProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Full-Width Official Quotation Payment Notice Panel (Positioned after Bank Settlement Details, before Terms & Conditions) */}
+            {isQuotation && (
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-300 space-y-2 font-mono text-xs text-slate-900">
+                <div className="font-extrabold uppercase text-[11px] tracking-wider text-slate-900 flex items-center gap-1.5 border-b border-slate-200 pb-1.5">
+                  <AlertCircle size={14} className="text-blue-700 shrink-0" />
+                  <span>PAYMENT NOTICE</span>
+                </div>
+                <div className="space-y-1">
+                  <p className="font-semibold text-slate-900 leading-relaxed">
+                    {Boolean(quoteData?.allowZiGPayments ?? quoteData?.allow_zig_payments) ? (
+                      <>Payments in <strong className="font-extrabold text-slate-950">ZiG and USD are permitted</strong>.</>
+                    ) : (
+                      <>Payments accepted in <strong className="font-extrabold text-slate-950">USD only</strong>.</>
+                    )}
+                  </p>
+                  <p className="text-slate-700 leading-relaxed text-[11px]">
+                    A <strong className="font-bold text-slate-950">3% withdrawal fee</strong> applies to USD payments made via <strong className="font-bold text-slate-950">EcoCash or other applicable electronic wallet services</strong>.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Terms & Conditions (Quotation Only when enabled) */}
+            {isQuotation && (quoteData?.include_terms_conditions || quoteData?.includeTermsConditions) && (
+              <div className="pt-2 border-t border-slate-300 space-y-2">
+                <p className="font-bold text-xs text-slate-900 uppercase tracking-wider">Terms & Conditions</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[9.5px] font-sans text-slate-600 leading-relaxed">
+                  {QUOTATION_TERMS_AND_CONDITIONS.map((clause, idx) => (
+                    <div key={idx} className="bg-slate-50/80 p-2 rounded border border-slate-200/70">
+                      <p className="font-bold text-slate-800 text-[10px]">{clause.title}</p>
+                      <p className="text-slate-600">{clause.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Official Computer Generated Disclaimer */}
             <div className="text-center pt-2 text-[10px] text-slate-400 uppercase font-mono">

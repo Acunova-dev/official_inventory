@@ -22,7 +22,7 @@ export const QUOTATION_TERMS_AND_CONDITIONS: TermClause[] = [
   },
   {
     title: "Payment Terms, Warranty & Inspection",
-    content: "Payment shall be made in accordance with the agreed payment terms and, unless otherwise agreed in writing, before dispatch of the goods. Products are supplied with the applicable manufacturer's warranty where available. The customer is responsible for inspecting all goods upon delivery and must report any shortages, incorrect items, or visible damage within 48 hours of receipt."
+    content: "Full payment must be made before delivery of the goods unless otherwise agreed in writing by Acunova Pvt Ltd. Products are supplied with the applicable manufacturer's warranty where available. The customer is responsible for inspecting all goods upon delivery and must report any shortages, incorrect items, or visible damage within 48 hours of receipt."
   },
   {
     title: "Acceptance",

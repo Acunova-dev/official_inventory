@@ -40,6 +40,7 @@ import { UnifiedDocumentModal } from "../components/UnifiedDocumentModal";
 import { DocumentOcrModal } from "../components/DocumentOcrModal";
 import { PrintConfirmationModal } from "../components/PrintConfirmationModal";
 import { normalizeDocument, enrichDocumentData, exportDocumentToPdf } from "../utils/documentPrinter";
+import { ProductAutocompleteSelect } from "../components/ProductAutocompleteSelect";
 
 // Form validation schema
 const quotationFormSchema = z.object({
@@ -627,7 +628,9 @@ export const Quotations: React.FC = () => {
                       <tr key={q.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="py-4 px-6 font-bold text-slate-900 font-mono text-sm">{q.quotationNumber}</td>
                         <td className="py-4 px-6 text-slate-800">{q.customerName}</td>
-                        <td className="py-4 px-6 text-slate-400 font-mono text-xs">{q.date}</td>
+                        <td className="py-4 px-6 text-slate-400 font-mono text-xs">
+                          {q.date || <span className="italic text-slate-400">Pending Issue</span>}
+                        </td>
                         <td className="py-4 px-6 text-right text-slate-500 font-mono">{q.lines.length} Parts</td>
                         <td className="py-4 px-6 text-right font-black text-slate-900 font-mono">${q.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td className="py-4 px-6 text-center">
@@ -816,44 +819,70 @@ export const Quotations: React.FC = () => {
                 {errors.items && <p className="text-xs text-rose-500 font-semibold">{errors.items.message}</p>}
 
                 <div className="space-y-3">
-                  {fields.map((field, index) => (
-                    <div key={field.id} className="flex gap-4 items-center bg-slate-50/50 p-3 rounded-xl border border-slate-150 relative">
-                      <div className="flex-1">
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Electronics Part</label>
-                        <select
-                          {...register(`items.${index}.productId`, { required: true })}
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-2 text-xs font-semibold focus:outline-hidden"
-                        >
-                          <option value="">-- Choose Hardware --</option>
-                          {products.map(p => (
-                            <option key={p.id} value={p.id} disabled={p.quantity <= 0}>
-                              {p.name} (${p.sellingPrice}) {p.quantity <= 0 ? "[OUT OF STOCK]" : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                  {fields.map((field, index) => {
+                    const currentProdId = watch(`items.${index}.productId`);
+                    const currentQty = Number(watch(`items.${index}.quantity`) || 1);
+                    const selectedProd = products.find(p => p.id === currentProdId);
+                    const isExceedingStock = selectedProd && selectedProd.quantity > 0 && currentQty > selectedProd.quantity;
+                    const isOutOfStock = selectedProd && selectedProd.quantity <= 0;
 
-                      <div className="w-24">
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Quantity</label>
-                        <input
-                          type="number"
-                          min="1"
-                          {...register(`items.${index}.quantity`, { required: true, valueAsNumber: true })}
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-2 text-xs text-center font-bold font-mono focus:outline-hidden"
-                        />
-                      </div>
+                    return (
+                      <div key={field.id} className="bg-slate-50/60 p-3.5 rounded-xl border border-slate-200/80 space-y-2">
+                        <div className="flex gap-3 items-center relative">
+                          <div className="flex-1 min-w-0">
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Electronics Part (Searchable Autocomplete)</label>
+                            <ProductAutocompleteSelect
+                              products={products}
+                              value={currentProdId || ""}
+                              onChange={(newId) => {
+                                setValue(`items.${index}.productId`, newId, { shouldValidate: true, shouldDirty: true });
+                              }}
+                              placeholder="Search product name, SKU, or type keywords (e.g. esp, gps, solar)..."
+                              autoFocus={!currentProdId}
+                              error={errors.items?.[index]?.productId?.message}
+                              id={`item-select-${index}`}
+                            />
+                          </div>
 
-                      {fields.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => remove(index)}
-                          className="mt-4 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                          <div className="w-24 shrink-0">
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Quantity</label>
+                            <input
+                              type="number"
+                              min="1"
+                              {...register(`items.${index}.quantity`, { required: true, valueAsNumber: true })}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-2 py-2 text-xs text-center font-bold font-mono focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
+                            />
+                          </div>
+
+                          {fields.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => remove(index)}
+                              title="Remove item"
+                              className="mt-5 p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Internal Informational Inventory Notice (Non-blocking) */}
+                        {isOutOfStock && (
+                          <div className="text-[11px] text-amber-800 bg-amber-50/90 border border-amber-200/90 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 font-sans">
+                            <AlertCircle size={13} className="text-amber-600 shrink-0" />
+                            <span><strong>Special Order:</strong> Item currently out of stock. All {currentQty} {currentQty === 1 ? 'unit' : 'units'} will require procurement upon order confirmation.</span>
+                          </div>
+                        )}
+
+                        {isExceedingStock && (
+                          <div className="text-[11px] text-amber-800 bg-amber-50/90 border border-amber-200/90 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 font-sans">
+                            <AlertCircle size={13} className="text-amber-600 shrink-0" />
+                            <span>Requested quantity exceeds available inventory ({selectedProd.quantity} in stock). The remaining quantity ({currentQty - selectedProd.quantity}) will require procurement.</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-slate-100">
@@ -1245,8 +1274,8 @@ export const Quotations: React.FC = () => {
                   <span className="text-xs uppercase font-serif text-slate-400 tracking-widest font-bold">Formal Sales Quotation</span>
                   <h2 className="text-xl font-bold font-mono text-slate-900 mt-1">{selectedQuote.quotationNumber}</h2>
                   <div className="text-xs text-slate-400 font-mono mt-1 space-y-0.5">
-                    <p>Date Generated: {selectedQuote.date}</p>
-                    <p>Expires On: {selectedQuote.expiryDate}</p>
+                    <p>Date Issued: {selectedQuote.date || "Draft (Pending Issue)"}</p>
+                    <p>Valid Until: {selectedQuote.date ? (selectedQuote.expiryDate || "30 Days from date of issue") : "30 Days from date of issue"}</p>
                   </div>
                 </div>
               </div>
@@ -1292,18 +1321,9 @@ export const Quotations: React.FC = () => {
                 </div>
               </div>
 
-              {/* Calculation Summary Footer & Payment Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 pt-6 border-t border-slate-150 gap-6">
+              {/* Calculation Summary Footer & Banking Settlement Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 pt-2 border-t border-slate-150 gap-6">
                 <div className="text-xs text-slate-500 leading-relaxed font-sans space-y-3">
-                  <div>
-                    <p className="font-semibold text-slate-700 uppercase tracking-widest text-[9px] mb-1">Payment Notice</p>
-                    <p className="font-medium text-slate-800">
-                      {(selectedQuote.allowZiGPayments || selectedQuote.allow_zig_payments) 
-                        ? "USD & ZiG payments accepted." 
-                        : "Payments accepted in USD only."}
-                    </p>
-                  </div>
-
                   <div>
                     <p className="font-semibold text-slate-700 uppercase tracking-widest text-[9px] mb-1">Banking Details</p>
                     <div className="space-y-1 text-[11px] text-slate-600">
@@ -1354,6 +1374,26 @@ export const Quotations: React.FC = () => {
                     <span className="font-sans text-slate-400 uppercase tracking-wide">GRAND TOTAL DUE ($)</span>
                     <span className="text-xl text-blue-600 font-mono">${selectedQuote.total.toFixed(2)}</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Full-Width Official Quotation Payment Notice Panel (Positioned After Banking & Totals, Before Terms & Conditions) */}
+              <div className="bg-slate-50/90 rounded-2xl p-4 border border-slate-200 space-y-2 text-xs font-sans">
+                <div className="flex items-center gap-2 text-slate-900 font-extrabold uppercase text-[11px] tracking-wider pb-1.5 border-b border-slate-200">
+                  <AlertCircle size={14} className="text-blue-600 shrink-0" />
+                  <span>PAYMENT NOTICE</span>
+                </div>
+                <div className="text-slate-800 text-xs leading-relaxed space-y-1">
+                  <p className="font-semibold text-slate-900">
+                    {(selectedQuote.allowZiGPayments || selectedQuote.allow_zig_payments) ? (
+                      <>Payments in <strong className="font-extrabold text-slate-950">ZiG and USD are permitted</strong>.</>
+                    ) : (
+                      <>Payments accepted in <strong className="font-extrabold text-slate-950">USD only</strong>.</>
+                    )}
+                  </p>
+                  <p className="text-slate-600">
+                    A <strong className="font-bold text-slate-900">3% withdrawal fee</strong> applies to USD payments made via <strong className="font-bold text-slate-900">EcoCash or other applicable electronic wallet services</strong>.
+                  </p>
                 </div>
               </div>
 

@@ -972,6 +972,11 @@ export const quotationService = {
           const unitPrice = multiplier > 1 ? Number((basePrice * multiplier).toFixed(2)) : basePrice;
           const lineTotal = Number((item.quantity * unitPrice).toFixed(2));
           subtotal += lineTotal;
+          const inStock = Math.max(0, prod.quantity || 0);
+          const procurementQty = Math.max(0, item.quantity - inStock);
+          const procurementType: 'in_stock' | 'special_order' | 'partial_procurement' = 
+            inStock >= item.quantity ? 'in_stock' : inStock > 0 ? 'partial_procurement' : 'special_order';
+
           lines.push({
             productId: item.productId,
             productName: prod.name,
@@ -979,7 +984,11 @@ export const quotationService = {
             quantity: item.quantity,
             unitPrice: unitPrice,
             totalPrice: lineTotal,
-            baseUnitPrice: basePrice
+            baseUnitPrice: basePrice,
+            base_unit_price: basePrice,
+            procurementType,
+            inStockQuantity: inStock,
+            procurementQuantity: procurementQty
           });
         }
       } catch {
@@ -1007,6 +1016,13 @@ export const quotationService = {
     const userUid = currentUser?.uid || "unknown";
     const nowIso = new Date().toISOString();
 
+    const quoteStatus = (payload.status as any) || "Draft";
+    const isSent = quoteStatus === "Sent" || quoteStatus === "Accepted";
+    const dateIssued = isSent ? nowIso.split("T")[0] : "";
+    const expiryDate = isSent 
+      ? new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0] 
+      : "";
+
     const quote: Quotation = {
       id,
       quotationNumber,
@@ -1015,8 +1031,8 @@ export const quotationService = {
       customerEmail,
       customerPhone,
       customerAddress,
-      date: new Date().toISOString().split("T")[0],
-      expiryDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+      date: dateIssued,
+      expiryDate: expiryDate,
       lines,
       subtotal,
       taxRate,
@@ -1038,7 +1054,7 @@ export const quotationService = {
       street_rate: sRate || undefined,
       calculatedMultiplier: multiplier,
       calculated_multiplier: multiplier,
-      status: (payload.status as any) || "Draft",
+      status: quoteStatus,
       notes: payload.notes || "",
       createdByUid: userUid,
       createdByName: userName,
@@ -1207,8 +1223,22 @@ export const quotationService = {
       const userUid = currentUser?.uid || "unknown";
       const nowIso = new Date().toISOString();
 
+      const targetStatus = payload.status || existingQuote.status;
+      const isTransitioningToSent = (targetStatus === "Sent" || targetStatus === "Accepted") && (!existingQuote.date || existingQuote.status === "Draft");
+
+      let finalDate = payload.date !== undefined ? payload.date : existingQuote.date;
+      let finalExpiryDate = payload.expiryDate !== undefined ? payload.expiryDate : existingQuote.expiryDate;
+
+      if (isTransitioningToSent && !payload.date) {
+        finalDate = nowIso.split("T")[0];
+        finalExpiryDate = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+      }
+
       const updateData: any = {
         ...payload,
+        date: finalDate,
+        expiryDate: finalExpiryDate,
+        status: targetStatus,
         customerName,
         customerEmail,
         customerPhone,

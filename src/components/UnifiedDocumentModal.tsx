@@ -591,11 +591,6 @@ export const UnifiedDocumentModal: React.FC<UnifiedDocumentModalProps> = ({
                     {ecocashNumber && (
                       <p><span className="font-bold text-slate-900">EcoCash Number:</span> <span className="font-bold text-slate-900">{ecocashNumber}</span></p>
                     )}
-                    {normDoc.docType === "quotation" && (
-                      <div className={`mt-2 pt-1 border-t border-slate-200/80 font-bold ${normDoc.allowZiGPayments ? 'text-blue-700' : 'text-amber-700'}`}>
-                        {normDoc.allowZiGPayments ? 'Payment Notice: USD & ZiG payments accepted.' : 'Payment Notice: Payments accepted in USD only.'}
-                      </div>
-                    )}
                   </div>
                   {normDoc.notes && (
                     <div className="pt-2 border-t border-slate-200/80 text-[10px] text-slate-600">
@@ -634,6 +629,28 @@ export const UnifiedDocumentModal: React.FC<UnifiedDocumentModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Full-Width Official Quotation Payment Notice Panel (Positioned after Bank Settlement Details and Totals, before Terms & Conditions) */}
+              {normDoc.docType === "quotation" && (
+                <div className="bg-slate-50/90 rounded-xl p-4 border border-slate-300/80 shadow-xs space-y-2 text-xs font-mono">
+                  <div className="flex items-center gap-2 text-slate-900 font-extrabold uppercase text-[11px] tracking-wider pb-1.5 border-b border-slate-200">
+                    <AlertCircle size={14} className="text-blue-600 shrink-0" />
+                    <span>PAYMENT NOTICE</span>
+                  </div>
+                  <div className="text-slate-800 text-xs leading-relaxed space-y-1">
+                    <p className="font-semibold text-slate-900">
+                      {normDoc.allowZiGPayments ? (
+                        <>Payments in <strong className="font-extrabold text-slate-950">ZiG and USD are permitted</strong>.</>
+                      ) : (
+                        <>Payments accepted in <strong className="font-extrabold text-slate-950">USD only</strong>.</>
+                      )}
+                    </p>
+                    <p className="text-slate-700">
+                      A <strong className="font-bold text-slate-950">3% withdrawal fee</strong> applies to USD payments made via <strong className="font-bold text-slate-950">EcoCash or other applicable electronic wallet services</strong>.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Terms & Conditions Section (When enabled for Quotations or present in document) */}
               {(normDoc.include_terms_conditions || normDoc.terms_and_conditions) && (

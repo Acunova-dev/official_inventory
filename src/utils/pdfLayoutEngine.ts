@@ -456,6 +456,81 @@ export class PdfFlowEngine {
   }
 
   /**
+   * Renders the Full-Width Official Quotation Payment Notice Panel.
+   * Prominently positioned immediately above the Bank Settlement Details & Totals block.
+   * Dynamically displays accepted currencies (USD only vs ZiG & USD) and the 3% USD withdrawal fee.
+   */
+  public renderQuotationPaymentNotice(normDoc: NormalizedPrintDocument): void {
+    if (normDoc.docType !== "quotation") return;
+
+    const allowZiG = Boolean(normDoc.allowZiGPayments);
+    const line1 = allowZiG
+      ? "Payments in ZiG and USD are permitted."
+      : "Payments accepted in USD only.";
+    const line2 =
+      "A 3% withdrawal fee applies to USD payments made via EcoCash or other applicable electronic wallet services.";
+
+    // Split text to ensure it wraps cleanly within container padding
+    const innerWidth = this.contentWidth - 12;
+    this.doc.setFont("helvetica", "normal");
+    this.doc.setFontSize(8);
+    const line2Wrapped = this.doc.splitTextToSize(line2, innerWidth);
+
+    // Calculate dynamic panel height
+    // Top pad (4.0) + Title (4.5) + Divider gap (2.5) + Line 1 (4.0) + Line 2 wrapped (lines * 3.6) + Bottom pad (3.5)
+    const panelHeight = 11 + 4.0 + (line2Wrapped.length * 3.6) + 3;
+
+    this.ensureSpace(panelHeight + 4);
+
+    const atY = this.currentY;
+
+    // Panel Background (Clean light neutral / subtle cool tint for professional commercial look)
+    this.doc.setFillColor(248, 250, 252); // slate-50
+    this.doc.roundedRect(this.leftMargin, atY, this.contentWidth, panelHeight, 1.5, 1.5, "F");
+
+    // Border (Refined slate-300 border)
+    this.doc.setDrawColor(203, 213, 225); // slate-300
+    this.doc.setLineWidth(0.35);
+    this.doc.roundedRect(this.leftMargin, atY, this.contentWidth, panelHeight, 1.5, 1.5, "S");
+
+    // Left Accent Indicator Bar (subtle corporate indicator)
+    this.doc.setFillColor(this.primaryColor.r, this.primaryColor.g, this.primaryColor.b);
+    this.doc.roundedRect(this.leftMargin, atY, 2.5, panelHeight, 1, 1, "F");
+
+    const textLeft = this.leftMargin + 5.5;
+
+    // 1. Title: PAYMENT NOTICE (Bold, uppercase, slightly larger than normal body)
+    this.doc.setFont("helvetica", "bold");
+    this.doc.setFontSize(8.5);
+    this.doc.setTextColor(15, 23, 42); // slate-900
+    this.doc.text("PAYMENT NOTICE", textLeft, atY + 4.5);
+
+    // Subtle horizontal divider under title
+    this.doc.setDrawColor(226, 232, 240); // slate-200
+    this.doc.setLineWidth(0.25);
+    this.doc.line(textLeft, atY + 6.5, this.leftMargin + this.contentWidth - 4, atY + 6.5);
+
+    // 2. Line 1: Currency acceptance with prominent emphasis
+    let contentY = atY + 10.5;
+    this.doc.setFont("helvetica", "bold");
+    this.doc.setFontSize(8);
+    this.doc.setTextColor(15, 23, 42); // slate-900
+    this.doc.text(line1, textLeft, contentY);
+
+    // 3. Line 2: 3% withdrawal fee explanation
+    contentY += 4.2;
+    this.doc.setFont("helvetica", "normal");
+    this.doc.setFontSize(7.8);
+    this.doc.setTextColor(51, 65, 85); // slate-700
+    line2Wrapped.forEach((lineText: string) => {
+      this.doc.text(lineText, textLeft, contentY);
+      contentY += 3.6;
+    });
+
+    this.currentY = atY + panelHeight + 5;
+  }
+
+  /**
    * Renders Side-by-Side Bank Settlement Details (Left) and Financial Totals Summary (Right).
    * Ensures that currentY is advanced past the taller of both columns.
    */
@@ -475,7 +550,6 @@ export class PdfFlowEngine {
     if (showRtgs) leftLinesCount++;
     if (this.settings.ecocashNumber) leftLinesCount++;
     if (normDoc.paymentMethod) leftLinesCount++;
-    if (isQuote) leftLinesCount++; // Payment Notice
     const leftHeight = 6 + (leftLinesCount * 4.2);
 
     // Totals lines measurement
@@ -519,19 +593,6 @@ export class PdfFlowEngine {
     if (normDoc.paymentMethod) {
       this.doc.text(`Payment Method: ${normDoc.paymentMethod}`, this.leftMargin, bankCurY);
       bankCurY += 4.0;
-    }
-    if (isQuote) {
-      this.doc.setFont("helvetica", "bold");
-      this.doc.setTextColor(allowZiG ? 30 : 180, allowZiG ? 64 : 83, allowZiG ? 175 : 9); // blue or amber
-      this.doc.text(
-        allowZiG 
-          ? "Payment Notice: USD & ZiG payments accepted." 
-          : "Payment Notice: Payments accepted in USD only.", 
-        this.leftMargin, 
-        bankCurY
-      );
-      this.doc.setFont("helvetica", "normal");
-      this.doc.setTextColor(15, 23, 42);
     }
 
     // --- Right Column: Financial Totals Summary ---
@@ -848,6 +909,36 @@ export class PdfFlowEngine {
     this.doc.text(`TOTAL:`, this.leftMargin, y);
     this.doc.text(`${normDoc.currency} ${normDoc.totalAmount.toFixed(2)}`, rightAlignX, y, { align: "right" });
     y += 6;
+
+    // Quotation Payment Notice on thermal receipts
+    if (normDoc.docType === "quotation") {
+      const allowZiG = Boolean(normDoc.allowZiGPayments);
+      this.doc.line(this.leftMargin, y, rightAlignX, y);
+      y += 4;
+      this.doc.setFont("helvetica", "bold");
+      this.doc.setFontSize(8);
+      this.doc.text("PAYMENT NOTICE", centerX, y, { align: "center" });
+      y += 3.8;
+      this.doc.setFont("helvetica", "bold");
+      this.doc.setFontSize(7);
+      this.doc.text(
+        allowZiG ? "Payments in ZiG and USD are permitted." : "Payments accepted in USD only.",
+        this.leftMargin,
+        y
+      );
+      y += 3.5;
+      this.doc.setFont("helvetica", "normal");
+      this.doc.setFontSize(6.5);
+      const feeLines = this.doc.splitTextToSize(
+        "A 3% withdrawal fee applies to USD payments made via EcoCash or other applicable electronic wallet services.",
+        this.contentWidth
+      );
+      feeLines.forEach((fl: string) => {
+        this.doc.text(fl, this.leftMargin, y);
+        y += 3.0;
+      });
+      y += 2;
+    }
 
     // Terms & Conditions on thermal if enabled
     if (normDoc.include_terms_conditions) {

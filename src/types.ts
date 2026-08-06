@@ -414,6 +414,10 @@ export interface QuotationLine {
   unitPrice: number;
   totalPrice: number;
   baseUnitPrice?: number;
+  base_unit_price?: number;
+  procurementType?: 'in_stock' | 'special_order' | 'partial_procurement';
+  inStockQuantity?: number;
+  procurementQuantity?: number;
 }
 
 export interface Quotation {

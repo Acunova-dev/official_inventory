@@ -58,6 +58,9 @@ interface QuotationLine {
   totalPrice: number;
   baseUnitPrice?: number;
   base_unit_price?: number;
+  procurementType?: 'in_stock' | 'special_order' | 'partial_procurement';
+  inStockQuantity?: number;
+  procurementQuantity?: number;
 }
 
 interface Quotation {
@@ -96,6 +99,8 @@ interface Quotation {
   isConverted?: boolean;
   convertedInvoiceId?: string;
   convertedInvoiceNumber?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface ReceiptLine {
@@ -1321,6 +1326,11 @@ function calculateCartTotals(
     const totalPrice = Number((adjustedUnitPrice * qty).toFixed(2));
     subtotal += totalPrice;
 
+    const inStock = originalProd ? Math.max(0, originalProd.quantity || 0) : 0;
+    const procurementQty = Math.max(0, qty - inStock);
+    const procurementType: 'in_stock' | 'special_order' | 'partial_procurement' = 
+      inStock >= qty ? 'in_stock' : inStock > 0 ? 'partial_procurement' : 'special_order';
+
     lines.push({
       productId: originalProd ? originalProd.id : item.productId,
       productName: originalProd ? originalProd.name : "Product",
@@ -1328,7 +1338,11 @@ function calculateCartTotals(
       quantity: qty,
       unitPrice: adjustedUnitPrice,
       totalPrice,
-      baseUnitPrice: basePrice
+      baseUnitPrice: basePrice,
+      base_unit_price: basePrice,
+      procurementType,
+      inStockQuantity: inStock,
+      procurementQuantity: procurementQty
     });
   }
 
@@ -1458,6 +1472,14 @@ app.post("/api/v1/quotations", (req, res) => {
     sRate
   );
 
+  const quoteStatus = status || "Draft";
+  const nowIso = new Date().toISOString();
+  const isSent = quoteStatus === "Sent" || quoteStatus === "Accepted";
+  const dateIssued = isSent ? nowIso.split("T")[0] : "";
+  const expiryDate = isSent 
+    ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] 
+    : "";
+
   const newQuote: Quotation = {
     id: `qt-${Date.now()}`,
     quotationNumber: `QT-2026-00${db.quotations.length + 1}`,
@@ -1466,8 +1488,9 @@ app.post("/api/v1/quotations", (req, res) => {
     customerEmail: customer.email,
     customerPhone: customer.phone,
     customerAddress: customer.address,
-    date: new Date().toISOString().split("T")[0],
-    expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    date: dateIssued,
+    expiryDate: expiryDate,
+    createdAt: nowIso,
     lines: calculated.lines,
     subtotal: calculated.subtotal,
     taxRate: calculated.taxRate,
@@ -1489,7 +1512,7 @@ app.post("/api/v1/quotations", (req, res) => {
     street_rate: sRate || undefined,
     calculatedMultiplier: calculated.calculatedMultiplier,
     calculated_multiplier: calculated.calculatedMultiplier,
-    status: status || "Draft",
+    status: quoteStatus,
     notes: notes || ""
   };
 
@@ -1591,10 +1614,23 @@ app.put("/api/v1/quotations/:id", (req, res) => {
     );
   }
 
+  const targetStatus = status || original.status;
+  const isTransitioningToSent = (targetStatus === "Sent" || targetStatus === "Accepted") && (!original.date || original.status === "Draft");
+  
+  let finalDate = original.date;
+  let finalExpiryDate = original.expiryDate;
+
+  if (isTransitioningToSent) {
+    finalDate = new Date().toISOString().split("T")[0];
+    finalExpiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  }
+
   db.quotations[index] = {
     ...original,
     ...customerUpdates,
-    status: status || original.status,
+    status: targetStatus,
+    date: finalDate,
+    expiryDate: finalExpiryDate,
     notes: notes !== undefined ? notes : original.notes,
     include_terms_conditions: incTerms,
     includeTermsConditions: incTerms,
