@@ -354,6 +354,74 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["currentCount"]
+    },
+    "FulfilmentOrder": {
+      "title": "FulfilmentOrder",
+      "description": "Order fulfilment consignment and packaging tracker",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "orderNumber": { "type": "string", "maxLength": 64 },
+        "invoiceId": { "type": "string", "maxLength": 128 },
+        "invoiceNumber": { "type": "string", "maxLength": 64 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "status": { "type": "string", "maxLength": 32 },
+        "totalAmount": { "type": "number" },
+        "amountPaid": { "type": "number" },
+        "outstandingBalance": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "businessId", "orderNumber", "invoiceId", "customerName", "status"]
+    },
+    "PickAndDropBatch": {
+      "title": "PickAndDropBatch",
+      "description": "Dispatch batch grouping for transit and collection",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "batchNumber": { "type": "string", "maxLength": 64 },
+        "pickupLocation": { "type": "string", "maxLength": 150 },
+        "status": { "type": "string", "maxLength": 32 },
+        "driverName": { "type": "string", "maxLength": 100 },
+        "totalOrders": { "type": "number" },
+        "totalItems": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "businessId", "batchNumber", "status"]
+    },
+    "CollectionTicket": {
+      "title": "CollectionTicket",
+      "description": "Customer collection pass with verification token",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ticketNumber": { "type": "string", "maxLength": 64 },
+        "fulfilmentOrderId": { "type": "string", "maxLength": 128 },
+        "invoiceId": { "type": "string", "maxLength": 128 },
+        "invoiceNumber": { "type": "string", "maxLength": 64 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "token": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "ticketNumber", "token", "status"]
+    },
+    "PickupLocation": {
+      "title": "PickupLocation",
+      "description": "Collection station and distribution desk location",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "businessId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 150 },
+        "address": { "type": "string", "maxLength": 300 },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name"]
     }
   },
   "firestore": {
@@ -364,6 +432,22 @@
     "/users/{userId}": {
       "schema": "User",
       "description": "User profile document"
+    },
+    "/businesses/{businessId}/fulfilmentOrders/{orderId}": {
+      "schema": "FulfilmentOrder",
+      "description": "Warehouse and collection fulfilment orders"
+    },
+    "/businesses/{businessId}/pickDropBatches/{batchId}": {
+      "schema": "PickAndDropBatch",
+      "description": "Pick and drop transit batches"
+    },
+    "/businesses/{businessId}/collectionTickets/{ticketId}": {
+      "schema": "CollectionTicket",
+      "description": "Customer collection passes"
+    },
+    "/businesses/{businessId}/pickupLocations/{locationId}": {
+      "schema": "PickupLocation",
+      "description": "Pickup desk locations"
     },
     "/businesses/{businessId}/products/{productId}": {
       "schema": "Product",

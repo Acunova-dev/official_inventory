@@ -39,7 +39,18 @@ import {
   FinancialSummaryReport,
   Invoice,
   InvoiceLine,
-  PaymentVoucher
+  PaymentVoucher,
+  FulfilmentOrder,
+  FulfilmentItem,
+  FulfilmentStatus,
+  PickAndDropBatch,
+  PickAndDropBatchOrderSummary,
+  CollectionTicket,
+  PickupLocation,
+  FulfilmentSummaryStats,
+  FulfilmentChangeLog,
+  OrderItemChangeRecord,
+  BatchStatus
 } from "../types";
 
 import { DEFAULT_COMPANY_SETTINGS, getMergedCompanySettings } from "../constants/defaultSettings";
@@ -3056,3 +3067,1024 @@ export const purchasingService = {
     }
   }
 };
+
+// -------------------------------------------------------------
+// FULFILMENT & PICK & DROP SERVICE
+// -------------------------------------------------------------
+export const fulfilmentService = {
+  getPickupLocations: async (businessId: string): Promise<PickupLocation[]> => {
+    const path = `businesses/${businessId}/pickupLocations`;
+    try {
+      const snap = await getDocs(collection(db, path));
+      const locs = snap.docs.map(d => ({ id: d.id, ...d.data() } as PickupLocation));
+      if (locs.length === 0) {
+        const defaults: PickupLocation[] = [
+          {
+            id: "loc-central-desk",
+            name: "Main Collection Desk - Central Depot",
+            code: "MCD-01",
+            address: "10 Enterprise Road, Harare Central",
+            city: "Harare",
+            contactPerson: "Warehouse Supervisor",
+            contactPhone: "+263 77 100 2000",
+            isDefault: true,
+            status: "Active"
+          },
+          {
+            id: "loc-downtown-hub",
+            name: "Downtown Express Collection Hub",
+            code: "DEH-02",
+            address: "45 Samora Machel Avenue, Harare",
+            city: "Harare",
+            contactPerson: "Branch Agent",
+            contactPhone: "+263 77 200 3000",
+            isDefault: false,
+            status: "Active"
+          },
+          {
+            id: "loc-msasa-depot",
+            name: "Msasa Industrial Depot & Pickup",
+            code: "MID-03",
+            address: "12 George Avenue, Msasa Industrial",
+            city: "Harare",
+            contactPerson: "Depot Manager",
+            contactPhone: "+263 77 300 4000",
+            isDefault: false,
+            status: "Active"
+          }
+        ];
+        for (const l of defaults) {
+          await setDoc(doc(db, "businesses", businessId, "pickupLocations", l.id), { ...l, businessId });
+        }
+        return defaults;
+      }
+      return locs;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, path);
+    }
+  },
+
+  addPickupLocation: async (businessId: string, payload: Partial<PickupLocation>): Promise<PickupLocation> => {
+    const id = `loc-${Date.now()}`;
+    const path = `businesses/${businessId}/pickupLocations/${id}`;
+    const loc: PickupLocation = {
+      id,
+      name: payload.name || "Collection Point",
+      code: payload.code || `LOC-${Date.now().toString().slice(-4)}`,
+      address: payload.address || "Main Address",
+      city: payload.city || "Harare",
+      contactPerson: payload.contactPerson || "Agent",
+      contactPhone: payload.contactPhone || "",
+      isDefault: payload.isDefault || false,
+      status: "Active"
+    };
+    try {
+      await setDoc(doc(db, "businesses", businessId, "pickupLocations", id), { ...loc, businessId });
+      return loc;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, path);
+    }
+  },
+
+  syncFromInvoices: async (businessId: string): Promise<FulfilmentOrder[]> => {
+    try {
+      // 1. Fetch all invoices
+      const invSnap = await getDocs(collection(db, "businesses", businessId, "invoices"));
+      const invoices = invSnap.docs.map(d => ({ id: d.id, ...d.data() } as Invoice));
+
+      // 2. Fetch existing fulfilment orders
+      const foSnap = await getDocs(collection(db, "businesses", businessId, "fulfilmentOrders"));
+      const existingOrders = foSnap.docs.map(d => ({ id: d.id, ...d.data() } as FulfilmentOrder));
+      const existingInvoiceMap = new Map<string, FulfilmentOrder>();
+      existingOrders.forEach(fo => existingInvoiceMap.set(fo.invoiceId, fo));
+
+      // 3. Fetch products to check live stock
+      const prodSnap = await getDocs(collection(db, "businesses", businessId, "products"));
+      const productsMap = new Map<string, Product>();
+      prodSnap.docs.forEach(d => {
+        const p = { id: d.id, ...d.data() } as Product;
+        productsMap.set(p.id, p);
+      });
+
+      const nowIso = new Date().toISOString();
+      const currentUser = auth.currentUser;
+      const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "System");
+      const userUid = currentUser?.uid || "system";
+
+      for (const invoice of invoices) {
+        if (!existingInvoiceMap.has(invoice.id)) {
+          // Initialize new Fulfilment Order for this invoice
+          const foId = `fo-${invoice.id.replace('inv-', '')}`;
+          const orderNumber = `FO-${invoice.invoiceNumber.replace('INV-', '')}`;
+          
+          let anyItemOutOfStock = false;
+          const items: FulfilmentItem[] = invoice.lines.map(line => {
+            const prod = productsMap.get(line.productId);
+            const stock = prod ? prod.quantity : 0;
+            let stockStatus: FulfilmentItem["stockStatus"] = "In Stock";
+            if (stock <= 0) {
+              stockStatus = "Out of Stock";
+              anyItemOutOfStock = true;
+            } else if (stock < line.quantity) {
+              stockStatus = "Low Stock";
+            }
+            return {
+              productId: line.productId,
+              productName: line.productName || (prod ? prod.name : "Product Item"),
+              sku: prod?.sku || "",
+              orderedQty: line.quantity,
+              preparedQty: 0,
+              collectedQty: 0,
+              returnedQty: 0,
+              unitPrice: line.unitPrice,
+              totalPrice: line.totalPrice,
+              stockStatus,
+              availableWarehouseStock: stock
+            };
+          });
+
+          const initialStatus: FulfilmentStatus = anyItemOutOfStock ? "Awaiting Stock" : "Ready to Prepare";
+          const paymentStatus = invoice.status === "Paid" || invoice.outstandingBalance <= 0.001 
+            ? "Paid" 
+            : (invoice.amountPaid > 0 ? "Partially Paid" : "Unpaid");
+
+          const newOrder: FulfilmentOrder & { businessId: string } = {
+            id: foId,
+            orderNumber,
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            quotationId: invoice.quotationId,
+            quotationNumber: invoice.quotationNumber,
+            customerId: invoice.customerId,
+            customerName: invoice.customerName,
+            customerPhone: invoice.customerPhone,
+            customerEmail: invoice.customerEmail,
+            customerAddress: invoice.customerAddress,
+            items,
+            totalAmount: invoice.total,
+            amountPaid: invoice.amountPaid || 0,
+            outstandingBalance: invoice.outstandingBalance !== undefined ? invoice.outstandingBalance : invoice.total,
+            paymentStatus,
+            currency: invoice.currency || "$",
+            status: initialStatus,
+            pickupLocation: "Main Collection Desk - Central Depot",
+            createdAt: invoice.createdAt || nowIso,
+            updatedAt: nowIso,
+            createdByUid: userUid,
+            createdByName: userName,
+            businessId
+          };
+
+          await setDoc(doc(db, "businesses", businessId, "fulfilmentOrders", foId), newOrder);
+          existingOrders.push(newOrder);
+        } else {
+          // Sync live invoice payment status to existing fulfilment order
+          const existingOrder = existingInvoiceMap.get(invoice.id)!;
+          const newPaymentStatus = invoice.status === "Paid" || invoice.outstandingBalance <= 0.001 
+            ? "Paid" 
+            : (invoice.amountPaid > 0 ? "Partially Paid" : "Unpaid");
+          
+          if (
+            existingOrder.amountPaid !== invoice.amountPaid ||
+            existingOrder.outstandingBalance !== invoice.outstandingBalance ||
+            existingOrder.paymentStatus !== newPaymentStatus
+          ) {
+            await updateDoc(doc(db, "businesses", businessId, "fulfilmentOrders", existingOrder.id), {
+              amountPaid: invoice.amountPaid || 0,
+              outstandingBalance: invoice.outstandingBalance !== undefined ? invoice.outstandingBalance : 0,
+              paymentStatus: newPaymentStatus,
+              updatedAt: nowIso
+            });
+            existingOrder.amountPaid = invoice.amountPaid || 0;
+            existingOrder.outstandingBalance = invoice.outstandingBalance !== undefined ? invoice.outstandingBalance : 0;
+            existingOrder.paymentStatus = newPaymentStatus;
+          }
+        }
+      }
+
+      existingOrders.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return existingOrders;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, `businesses/${businessId}/fulfilmentOrders`);
+    }
+  },
+
+  getOrders: async (
+    businessId: string, 
+    filters?: { status?: string; search?: string; pickupLocation?: string; batchId?: string }
+  ): Promise<FulfilmentOrder[]> => {
+    const path = `businesses/${businessId}/fulfilmentOrders`;
+    try {
+      const snap = await getDocs(collection(db, path));
+      let orders = snap.docs.map(d => ({ id: d.id, ...d.data() } as FulfilmentOrder));
+
+      if (orders.length === 0) {
+        // Automatically sync from invoices if none found
+        orders = await fulfilmentService.syncFromInvoices(businessId);
+      }
+
+      if (filters?.status && filters.status !== "All") {
+        orders = orders.filter(o => o.status === filters.status);
+      }
+
+      if (filters?.pickupLocation && filters.pickupLocation !== "All") {
+        orders = orders.filter(o => o.pickupLocation === filters.pickupLocation);
+      }
+
+      if (filters?.batchId) {
+        orders = orders.filter(o => o.assignedBatchId === filters.batchId);
+      }
+
+      if (filters?.search) {
+        const q = filters.search.toLowerCase();
+        orders = orders.filter(o =>
+          o.orderNumber.toLowerCase().includes(q) ||
+          o.invoiceNumber.toLowerCase().includes(q) ||
+          (o.ticketNumber && o.ticketNumber.toLowerCase().includes(q)) ||
+          o.customerName.toLowerCase().includes(q) ||
+          (o.customerPhone && o.customerPhone.includes(q))
+        );
+      }
+
+      orders.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+      return orders;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, path);
+    }
+  },
+
+  getOneOrder: async (businessId: string, id: string): Promise<FulfilmentOrder> => {
+    const path = `businesses/${businessId}/fulfilmentOrders/${id}`;
+    try {
+      const snap = await getDoc(doc(db, "businesses", businessId, "fulfilmentOrders", id));
+      if (!snap.exists()) throw new Error("Fulfilment order not found.");
+      return { id: snap.id, ...snap.data() } as FulfilmentOrder;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, path);
+    }
+  },
+
+  prepareOrder: async (
+    businessId: string, 
+    id: string, 
+    payload: { stagingBay?: string; notes?: string; pickupLocation?: string },
+    userName: string = "Warehouse Staff"
+  ): Promise<{ order: FulfilmentOrder; ticket: CollectionTicket }> => {
+    const path = `businesses/${businessId}/fulfilmentOrders/${id}`;
+    try {
+      const orderSnap = await getDoc(doc(db, "businesses", businessId, "fulfilmentOrders", id));
+      if (!orderSnap.exists()) throw new Error("Fulfilment order not found.");
+      const order = { id: orderSnap.id, ...orderSnap.data() } as FulfilmentOrder;
+
+      const currentUser = auth.currentUser;
+      const activeUserName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : userName);
+      const userEmail = currentUser?.email || "";
+      const userUid = currentUser?.uid || "unknown";
+      const nowIso = new Date().toISOString();
+
+      // Generate Ticket Number & Cryptographic verification token
+      const ticketNumber = `PD-${Math.floor(100 + Math.random() * 900)}`;
+      const token = `tk_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
+      const ticketId = `ticket-${Date.now()}`;
+
+      // Update order items with prepared quantities
+      const updatedItems = order.items.map(item => ({
+        ...item,
+        preparedQty: item.orderedQty,
+        allocatedBay: payload.stagingBay || "Staging Bay A"
+      }));
+
+      // Create Collection Ticket Document
+      const ticket: CollectionTicket & { businessId: string } = {
+        id: ticketId,
+        ticketNumber,
+        token,
+        fulfilmentOrderId: order.id,
+        invoiceId: order.invoiceId,
+        invoiceNumber: order.invoiceNumber,
+        customerId: order.customerId,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        pickupLocation: payload.pickupLocation || order.pickupLocation,
+        status: "Ready for Collection",
+        totalAmount: order.totalAmount,
+        amountPaid: order.amountPaid,
+        outstandingBalance: order.outstandingBalance,
+        paymentStatus: order.paymentStatus === "Paid" ? "Paid" : (order.amountPaid > 0 ? "Partially Paid" : "Unpaid"),
+        items: updatedItems.map(i => ({
+          productName: i.productName,
+          quantity: i.orderedQty,
+          unitPrice: i.unitPrice
+        })),
+        createdAt: nowIso,
+        businessId
+      };
+
+      await setDoc(doc(db, "businesses", businessId, "collectionTickets", ticketId), ticket);
+
+      // Update Fulfilment Order
+      const updatedOrderData: Partial<FulfilmentOrder> = {
+        status: "Prepared",
+        stagingBay: payload.stagingBay || "Staging Bay A",
+        pickupLocation: payload.pickupLocation || order.pickupLocation,
+        notes: payload.notes ? (order.notes ? `${order.notes}\n${payload.notes}` : payload.notes) : order.notes,
+        ticketId,
+        ticketNumber,
+        ticketToken: token,
+        preparedBy: activeUserName,
+        preparedByUid: userUid,
+        preparedAt: nowIso,
+        items: updatedItems,
+        updatedAt: nowIso
+      };
+
+      await updateDoc(doc(db, "businesses", businessId, "fulfilmentOrders", id), updatedOrderData);
+
+      // Record Stock Movement Allocation for each item
+      for (const item of updatedItems) {
+        await stockMovementService.record(businessId, {
+          productId: item.productId,
+          productName: item.productName,
+          movementType: "Transfer",
+          quantity: item.orderedQty,
+          previousStock: item.availableWarehouseStock || 0,
+          newStock: Math.max(0, (item.availableWarehouseStock || 0) - item.orderedQty),
+          reason: `Stock Staged for Fulfilment #${order.orderNumber} (Ticket: ${ticketNumber}, Bay: ${payload.stagingBay || 'Staging Bay A'})`,
+          referenceNumber: ticketNumber,
+          userId: userUid,
+          userName: activeUserName
+        });
+      }
+
+      // Log system audit
+      await systemLogService.logAction(businessId, {
+        category: "Order Fulfilment",
+        action: "ORDER_PREPARED",
+        userEmail,
+        userName: activeUserName,
+        details: `Prepared Fulfilment Order #${order.orderNumber} for '${order.customerName}'. Generated Collection Ticket #${ticketNumber}. Staging Bay: ${payload.stagingBay || 'Staging Bay A'}.`,
+        targetId: order.id,
+        severity: "info"
+      });
+
+      return {
+        order: { ...order, ...updatedOrderData },
+        ticket
+      };
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  },
+
+  createBatch: async (
+    businessId: string,
+    payload: {
+      pickupLocation: string;
+      originLocation?: string;
+      driverName?: string;
+      driverPhone?: string;
+      vehicleReg?: string;
+      orderIds: string[];
+      notes?: string;
+    },
+    userName: string = "Dispatch Coordinator"
+  ): Promise<PickAndDropBatch> => {
+    const id = `pnd-${Date.now()}`;
+    const batchNumber = `PND-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const path = `businesses/${businessId}/pickDropBatches/${id}`;
+
+    const currentUser = auth.currentUser;
+    const activeUserName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : userName);
+    const userEmail = currentUser?.email || "";
+    const userUid = currentUser?.uid || "unknown";
+    const nowIso = new Date().toISOString();
+
+    try {
+      // 1. Fetch all selected fulfilment orders
+      const orderSummaries: PickAndDropBatchOrderSummary[] = [];
+      let totalItems = 0;
+      let totalValue = 0;
+      let totalOutstanding = 0;
+
+      for (const orderId of payload.orderIds) {
+        const oSnap = await getDoc(doc(db, "businesses", businessId, "fulfilmentOrders", orderId));
+        if (oSnap.exists()) {
+          const o = oSnap.data() as FulfilmentOrder;
+          const orderQty = o.items.reduce((s, it) => s + (it.orderedQty || 0), 0);
+          totalItems += orderQty;
+          totalValue += o.totalAmount || 0;
+          totalOutstanding += o.outstandingBalance || 0;
+
+          orderSummaries.push({
+            fulfilmentOrderId: o.id,
+            invoiceNumber: o.invoiceNumber,
+            customerName: o.customerName,
+            customerPhone: o.customerPhone,
+            ticketNumber: o.ticketNumber || "N/A",
+            itemCount: o.items.length,
+            totalQty: orderQty,
+            totalValue: o.totalAmount,
+            outstandingBalance: o.outstandingBalance,
+            status: "Assigned to Batch"
+          });
+
+          // Update order status to Assigned to Batch
+          await updateDoc(doc(db, "businesses", businessId, "fulfilmentOrders", orderId), {
+            assignedBatchId: id,
+            assignedBatchNumber: batchNumber,
+            status: "Assigned to Batch",
+            pickupLocation: payload.pickupLocation,
+            updatedAt: nowIso
+          });
+
+          // If ticket exists, link batch
+          if (o.ticketId) {
+            await updateDoc(doc(db, "businesses", businessId, "collectionTickets", o.ticketId), {
+              batchId: id,
+              batchNumber,
+              pickupLocation: payload.pickupLocation
+            });
+          }
+        }
+      }
+
+      const batch: PickAndDropBatch & { businessId: string } = {
+        id,
+        batchNumber,
+        pickupLocation: payload.pickupLocation,
+        originLocation: payload.originLocation || "Main Central Warehouse",
+        driverName: payload.driverName || "Standard Courier Fleet",
+        driverPhone: payload.driverPhone || "",
+        vehicleReg: payload.vehicleReg || "VAN-01",
+        orderIds: payload.orderIds,
+        orders: orderSummaries,
+        status: "Preparing",
+        totalOrders: payload.orderIds.length,
+        totalItems,
+        totalValue,
+        totalOutstanding,
+        notes: payload.notes || "",
+        createdBy: activeUserName,
+        createdByUid: userUid,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        businessId
+      };
+
+      await setDoc(doc(db, "businesses", businessId, "pickDropBatches", id), batch);
+
+      await systemLogService.logAction(businessId, {
+        category: "Pick & Drop Dispatch",
+        action: "BATCH_CREATED",
+        userEmail,
+        userName: activeUserName,
+        details: `Created Pick & Drop Batch #${batchNumber} with ${payload.orderIds.length} orders destined for '${payload.pickupLocation}'.`,
+        targetId: id,
+        severity: "info"
+      });
+
+      return batch;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, path);
+    }
+  },
+
+  getBatches: async (businessId: string): Promise<PickAndDropBatch[]> => {
+    const path = `businesses/${businessId}/pickDropBatches`;
+    try {
+      const snap = await getDocs(collection(db, path));
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as PickAndDropBatch));
+      list.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+      return list;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, path);
+    }
+  },
+
+  getOneBatch: async (businessId: string, id: string): Promise<PickAndDropBatch> => {
+    const path = `businesses/${businessId}/pickDropBatches/${id}`;
+    try {
+      const snap = await getDoc(doc(db, "businesses", businessId, "pickDropBatches", id));
+      if (!snap.exists()) throw new Error("Pick & Drop batch not found.");
+      return { id: snap.id, ...snap.data() } as PickAndDropBatch;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, path);
+    }
+  },
+
+  updateBatchStatus: async (
+    businessId: string,
+    batchId: string,
+    newStatus: BatchStatus,
+    userName: string = "Dispatch Manager"
+  ): Promise<PickAndDropBatch> => {
+    const path = `businesses/${businessId}/pickDropBatches/${batchId}`;
+    try {
+      const snap = await getDoc(doc(db, "businesses", businessId, "pickDropBatches", batchId));
+      if (!snap.exists()) throw new Error("Batch not found.");
+      const batch = snap.data() as PickAndDropBatch;
+
+      const currentUser = auth.currentUser;
+      const activeUserName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : userName);
+      const userEmail = currentUser?.email || "";
+      const nowIso = new Date().toISOString();
+
+      const updateData: Partial<PickAndDropBatch> = {
+        status: newStatus,
+        updatedAt: nowIso
+      };
+
+      let targetOrderStatus: FulfilmentStatus | null = null;
+
+      if (newStatus === "In Transit") {
+        updateData.dispatchedAt = nowIso;
+        updateData.dispatchedBy = activeUserName;
+        targetOrderStatus = "In Transit";
+      } else if (newStatus === "At Pickup Point") {
+        updateData.arrivedAt = nowIso;
+        updateData.arrivedBy = activeUserName;
+        targetOrderStatus = "At Pickup Point";
+      } else if (newStatus === "Completed" || newStatus === "Closed") {
+        updateData.completedAt = nowIso;
+        updateData.completedBy = activeUserName;
+      }
+
+      await updateDoc(doc(db, "businesses", businessId, "pickDropBatches", batchId), updateData);
+
+      // Propagate status to individual fulfilment orders
+      if (targetOrderStatus && batch.orderIds) {
+        for (const oId of batch.orderIds) {
+          await updateDoc(doc(db, "businesses", businessId, "fulfilmentOrders", oId), {
+            status: targetOrderStatus,
+            updatedAt: nowIso
+          });
+
+          // Also update linked collection ticket if arriving at pickup point
+          const oSnap = await getDoc(doc(db, "businesses", businessId, "fulfilmentOrders", oId));
+          if (oSnap.exists()) {
+            const o = oSnap.data() as FulfilmentOrder;
+            if (o.ticketId && targetOrderStatus === "At Pickup Point") {
+              await updateDoc(doc(db, "businesses", businessId, "collectionTickets", o.ticketId), {
+                status: "At Pickup Point"
+              });
+            }
+
+            // Record transit stock movement
+            for (const item of o.items) {
+              await stockMovementService.record(businessId, {
+                productId: item.productId,
+                productName: item.productName,
+                movementType: "Transfer",
+                quantity: item.orderedQty,
+                previousStock: item.availableWarehouseStock || 0,
+                newStock: item.availableWarehouseStock || 0,
+                reason: `Batch #${batch.batchNumber} status updated to '${newStatus}' (Location: ${batch.pickupLocation})`,
+                referenceNumber: batch.batchNumber,
+                userId: "current-user",
+                userName: activeUserName
+              });
+            }
+          }
+        }
+      }
+
+      await systemLogService.logAction(businessId, {
+        category: "Pick & Drop Dispatch",
+        action: `BATCH_STATUS_${newStatus.toUpperCase().replace(/\s+/g, '_')}`,
+        userEmail,
+        userName: activeUserName,
+        details: `Updated Batch #${batch.batchNumber} status to '${newStatus}'.`,
+        targetId: batchId,
+        severity: "info"
+      });
+
+      return { ...batch, ...updateData };
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  },
+
+  getTicketByToken: async (
+    businessId: string, 
+    tokenOrNumber: string
+  ): Promise<{ ticket: CollectionTicket; order: FulfilmentOrder; invoice?: Invoice } | null> => {
+    try {
+      const qToken = query(
+        collection(db, "businesses", businessId, "collectionTickets"),
+        where("token", "==", tokenOrNumber)
+      );
+      let snap = await getDocs(qToken);
+
+      if (snap.empty) {
+        // Fallback: search by ticketNumber (e.g. PD-123)
+        const qNum = query(
+          collection(db, "businesses", businessId, "collectionTickets"),
+          where("ticketNumber", "==", tokenOrNumber.toUpperCase())
+        );
+        snap = await getDocs(qNum);
+      }
+
+      if (snap.empty) {
+        // Fallback: search by ticketNumber or orderNumber or invoiceNumber directly in fulfilmentOrders
+        const foSnap = await getDocs(collection(db, "businesses", businessId, "fulfilmentOrders"));
+        const matchedOrder = foSnap.docs
+          .map(d => ({ id: d.id, ...d.data() } as FulfilmentOrder))
+          .find(o => 
+            o.ticketToken === tokenOrNumber ||
+            o.ticketNumber?.toUpperCase() === tokenOrNumber.toUpperCase() ||
+            o.orderNumber.toUpperCase() === tokenOrNumber.toUpperCase() ||
+            o.invoiceNumber.toUpperCase() === tokenOrNumber.toUpperCase()
+          );
+
+        if (matchedOrder) {
+          let inv: Invoice | undefined;
+          try {
+            const invSnap = await getDoc(doc(db, "businesses", businessId, "invoices", matchedOrder.invoiceId));
+            if (invSnap.exists()) inv = { id: invSnap.id, ...invSnap.data() } as Invoice;
+          } catch {}
+
+          const syntheticTicket: CollectionTicket = {
+            id: matchedOrder.ticketId || `ticket-${matchedOrder.id}`,
+            ticketNumber: matchedOrder.ticketNumber || `PD-${matchedOrder.orderNumber.slice(-4)}`,
+            token: matchedOrder.ticketToken || tokenOrNumber,
+            fulfilmentOrderId: matchedOrder.id,
+            invoiceId: matchedOrder.invoiceId,
+            invoiceNumber: matchedOrder.invoiceNumber,
+            customerId: matchedOrder.customerId,
+            customerName: matchedOrder.customerName,
+            customerPhone: matchedOrder.customerPhone,
+            pickupLocation: matchedOrder.pickupLocation,
+            status: matchedOrder.status,
+            totalAmount: matchedOrder.totalAmount,
+            amountPaid: inv ? inv.amountPaid : matchedOrder.amountPaid,
+            outstandingBalance: inv ? inv.outstandingBalance : matchedOrder.outstandingBalance,
+            paymentStatus: (inv ? (inv.status === "Paid" ? "Paid" : (inv.amountPaid > 0 ? "Partially Paid" : "Unpaid")) : matchedOrder.paymentStatus) as any,
+            items: matchedOrder.items.map(i => ({
+              productName: i.productName,
+              quantity: i.orderedQty,
+              unitPrice: i.unitPrice
+            })),
+            createdAt: matchedOrder.createdAt
+          };
+
+          return {
+            ticket: syntheticTicket,
+            order: matchedOrder,
+            invoice: inv
+          };
+        }
+
+        return null;
+      }
+
+      const ticketDoc = snap.docs[0];
+      const ticket = { id: ticketDoc.id, ...ticketDoc.data() } as CollectionTicket;
+
+      const orderSnap = await getDoc(doc(db, "businesses", businessId, "fulfilmentOrders", ticket.fulfilmentOrderId));
+      if (!orderSnap.exists()) return null;
+      const order = { id: orderSnap.id, ...orderSnap.data() } as FulfilmentOrder;
+
+      let invoice: Invoice | undefined;
+      try {
+        const invSnap = await getDoc(doc(db, "businesses", businessId, "invoices", order.invoiceId));
+        if (invSnap.exists()) {
+          invoice = { id: invSnap.id, ...invSnap.data() } as Invoice;
+          // Refresh real-time payment values
+          ticket.amountPaid = invoice.amountPaid || 0;
+          ticket.outstandingBalance = invoice.outstandingBalance !== undefined ? invoice.outstandingBalance : 0;
+          ticket.paymentStatus = invoice.status === "Paid" ? "Paid" : (invoice.amountPaid > 0 ? "Partially Paid" : "Unpaid");
+        }
+      } catch {}
+
+      return { ticket, order, invoice };
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, `businesses/${businessId}/collectionTickets`);
+      return null;
+    }
+  },
+
+  recordCollection: async (
+    businessId: string,
+    payload: {
+      fulfilmentOrderId: string;
+      outcome: "Collected" | "Not Collected";
+      recipientName?: string;
+      recipientPhone?: string;
+      recipientNationalId?: string;
+      signatureCaptured?: boolean;
+      paymentAmount?: number;
+      paymentMethod?: string;
+      bankAccountId?: string;
+      orderChanges?: Array<{ productId: string; newQty: number; reason: string }>;
+      notCollectedReason?: string;
+      notes?: string;
+    },
+    userName: string = "Collection Desk Agent"
+  ): Promise<{ order: FulfilmentOrder; receipt?: Receipt }> => {
+    const foRef = doc(db, "businesses", businessId, "fulfilmentOrders", payload.fulfilmentOrderId);
+    const foSnap = await getDoc(foRef);
+    if (!foSnap.exists()) throw new Error("Fulfilment order not found.");
+    const order = { id: foSnap.id, ...foSnap.data() } as FulfilmentOrder;
+
+    const currentUser = auth.currentUser;
+    const activeUserName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : userName);
+    const userEmail = currentUser?.email || "";
+    const userUid = currentUser?.uid || "unknown";
+    const nowIso = new Date().toISOString();
+
+    let issuedReceipt: Receipt | undefined;
+
+    // 1. Process payment at collection desk if paymentAmount > 0
+    if (payload.paymentAmount && payload.paymentAmount > 0 && order.invoiceId) {
+      const paymentRes = await invoiceService.generateReceiptFromInvoice(businessId, {
+        invoiceId: order.invoiceId,
+        amountReceived: payload.paymentAmount,
+        paymentMethod: payload.paymentMethod || "Cash",
+        bankAccountId: payload.bankAccountId,
+        referenceNumber: `COL-${order.ticketNumber || order.orderNumber}`,
+        notes: `Payment collected at Collection Desk for Ticket #${order.ticketNumber || order.orderNumber}`
+      });
+      issuedReceipt = paymentRes.receipt;
+      order.amountPaid = paymentRes.invoice.amountPaid;
+      order.outstandingBalance = paymentRes.invoice.outstandingBalance;
+      order.paymentStatus = paymentRes.invoice.status === "Paid" ? "Paid" : "Partially Paid";
+    }
+
+    // 2. Handle Order Changes / Discrepancies if customer only took partial or changed quantities
+    const changeLogs: FulfilmentChangeLog[] = order.changeLogs || [];
+    let updatedItems = [...order.items];
+
+    if (payload.orderChanges && payload.orderChanges.length > 0) {
+      const itemChangeRecords: OrderItemChangeRecord[] = [];
+      let totalDiffAmount = 0;
+
+      for (const change of payload.orderChanges) {
+        const itemIdx = updatedItems.findIndex(i => i.productId === change.productId);
+        if (itemIdx >= 0) {
+          const item = updatedItems[itemIdx];
+          const prevQty = item.orderedQty;
+          const newQty = Math.max(0, change.newQty);
+          const returnedQty = Math.max(0, prevQty - newQty);
+          const diffAmount = (prevQty - newQty) * item.unitPrice;
+          totalDiffAmount += diffAmount;
+
+          itemChangeRecords.push({
+            productId: item.productId,
+            productName: item.productName,
+            originalQty: prevQty,
+            newHandedOverQty: newQty,
+            returnedQty,
+            unitPrice: item.unitPrice,
+            differenceAmount: diffAmount
+          });
+
+          // Update item in order
+          updatedItems[itemIdx] = {
+            ...item,
+            collectedQty: payload.outcome === "Collected" ? newQty : 0,
+            returnedQty
+          };
+
+          // If items were returned / not taken, return to available warehouse stock
+          if (returnedQty > 0) {
+            const prodRef = doc(db, "businesses", businessId, "products", item.productId);
+            const pSnap = await getDoc(prodRef);
+            if (pSnap.exists()) {
+              const p = pSnap.data() as Product;
+              const restockedQty = p.quantity + returnedQty;
+              await updateDoc(prodRef, {
+                quantity: restockedQty,
+                updatedAt: nowIso
+              });
+            }
+
+            await stockMovementService.record(businessId, {
+              productId: item.productId,
+              productName: item.productName,
+              movementType: "Return",
+              quantity: returnedQty,
+              previousStock: item.availableWarehouseStock || 0,
+              newStock: (item.availableWarehouseStock || 0) + returnedQty,
+              reason: `Item Returned to Stock during Collection (${change.reason || 'Quantity change by customer at desk'}) [Ticket #${order.ticketNumber || order.orderNumber}]`,
+              referenceNumber: `RET-${order.ticketNumber || order.orderNumber}`,
+              userId: userUid,
+              userName: activeUserName
+            });
+          }
+        }
+      }
+
+      if (itemChangeRecords.length > 0) {
+        changeLogs.push({
+          id: `chg-${Date.now()}`,
+          timestamp: nowIso,
+          userName: activeUserName,
+          userEmail,
+          userUid,
+          reason: payload.notes || "Item quantity adjustment during collection desk handover",
+          itemChanges: itemChangeRecords,
+          totalOriginalAmount: order.totalAmount,
+          totalNewAmount: order.totalAmount - totalDiffAmount,
+          balanceAdjustment: totalDiffAmount,
+          invoiceAdjustmentRecorded: true
+        });
+      }
+    } else {
+      // Normal collection: mark all prepared items as collected
+      if (payload.outcome === "Collected") {
+        updatedItems = updatedItems.map(i => ({
+          ...i,
+          collectedQty: i.orderedQty,
+          returnedQty: 0
+        }));
+      }
+    }
+
+    // 3. Finalize physical stock deduction and order status
+    let finalStatus: FulfilmentStatus = order.status;
+
+    if (payload.outcome === "Collected") {
+      finalStatus = "Collected";
+
+      // Deduct physical inventory & record final handover stock movement
+      for (const item of updatedItems) {
+        const handedQty = item.collectedQty || item.orderedQty;
+        if (handedQty > 0) {
+          const prodRef = doc(db, "businesses", businessId, "products", item.productId);
+          const pSnap = await getDoc(prodRef);
+          if (pSnap.exists()) {
+            const p = pSnap.data() as Product;
+            const finalQty = Math.max(0, p.quantity - handedQty);
+            let pStatus: Product["status"] = "In Stock";
+            if (finalQty <= 0) pStatus = "Out Of Stock";
+            else if (finalQty <= p.minStock) pStatus = "Low Stock";
+
+            await updateDoc(prodRef, {
+              quantity: finalQty,
+              status: pStatus,
+              updatedAt: nowIso
+            });
+          }
+
+          await stockMovementService.record(businessId, {
+            productId: item.productId,
+            productName: item.productName,
+            movementType: "Sale",
+            quantity: handedQty,
+            previousStock: item.availableWarehouseStock || 0,
+            newStock: Math.max(0, (item.availableWarehouseStock || 0) - handedQty),
+            reason: `Handover to Customer '${payload.recipientName || order.customerName}' [Ticket: ${order.ticketNumber || order.orderNumber}]`,
+            referenceNumber: order.ticketNumber || order.orderNumber,
+            userId: userUid,
+            userName: activeUserName
+          });
+        }
+      }
+
+      // Update Ticket status
+      if (order.ticketId) {
+        await updateDoc(doc(db, "businesses", businessId, "collectionTickets", order.ticketId), {
+          status: "Collected",
+          collectedAt: nowIso,
+          collectedByAgent: activeUserName
+        });
+      }
+    } else {
+      finalStatus = "Not Collected";
+      if (order.ticketId) {
+        await updateDoc(doc(db, "businesses", businessId, "collectionTickets", order.ticketId), {
+          status: "Not Collected"
+        });
+      }
+    }
+
+    const updatePayload: Partial<FulfilmentOrder> = {
+      status: finalStatus,
+      items: updatedItems,
+      changeLogs,
+      collectedByAgent: activeUserName,
+      collectedByAgentUid: userUid,
+      collectedAt: payload.outcome === "Collected" ? nowIso : undefined,
+      recipientName: payload.recipientName || order.customerName,
+      recipientPhone: payload.recipientPhone || order.customerPhone,
+      recipientNationalId: payload.recipientNationalId || "",
+      signatureCaptured: payload.signatureCaptured || false,
+      paymentCollectedAtDesk: payload.paymentAmount || 0,
+      paymentReceiptNumber: issuedReceipt?.receiptNumber || undefined,
+      notCollectedReason: payload.outcome === "Not Collected" ? (payload.notCollectedReason || "Customer did not arrive") : undefined,
+      notes: payload.notes ? (order.notes ? `${order.notes}\n[Handover Note]: ${payload.notes}` : payload.notes) : order.notes,
+      amountPaid: order.amountPaid,
+      outstandingBalance: order.outstandingBalance,
+      paymentStatus: order.paymentStatus,
+      updatedAt: nowIso
+    };
+
+    await updateDoc(foRef, updatePayload);
+
+    await systemLogService.logAction(businessId, {
+      category: "Customer Collection",
+      action: payload.outcome === "Collected" ? "COLLECTION_COMPLETED" : "COLLECTION_NOT_COLLECTED",
+      userEmail,
+      userName: activeUserName,
+      details: payload.outcome === "Collected"
+        ? `Order #${order.orderNumber} (Ticket #${order.ticketNumber}) handed over to '${payload.recipientName || order.customerName}'. ${payload.paymentAmount ? `Collected desk payment: $${payload.paymentAmount.toFixed(2)}.` : ''} Balance remaining: $${(order.outstandingBalance || 0).toFixed(2)}.`
+        : `Order #${order.orderNumber} marked Not Collected. Reason: ${payload.notCollectedReason || 'Customer did not arrive'}.`,
+      targetId: order.id,
+      severity: payload.outcome === "Collected" ? "success" : "warning"
+    });
+
+    return {
+      order: { ...order, ...updatePayload },
+      receipt: issuedReceipt
+    };
+  },
+
+  getSummaryStats: async (businessId: string): Promise<FulfilmentSummaryStats> => {
+    try {
+      const orders = await fulfilmentService.getOrders(businessId);
+      const batchesSnap = await getDocs(collection(db, "businesses", businessId, "pickDropBatches"));
+      const batches = batchesSnap.docs.map(d => ({ id: d.id, ...d.data() } as PickAndDropBatch));
+
+      const todayStr = new Date().toISOString().split("T")[0];
+
+      let awaitingPrep = 0;
+      let readyToPrep = 0;
+      let prepared = 0;
+      let inBatches = 0;
+      let atPickup = 0;
+      let collectedToday = 0;
+      let notCollected = 0;
+      let withOutstanding = 0;
+      let totalActiveValue = 0;
+      let totalOutstandingValue = 0;
+
+      for (const o of orders) {
+        if (o.status === "Awaiting Stock") awaitingPrep++;
+        if (o.status === "Ready to Prepare") readyToPrep++;
+        if (o.status === "Prepared") prepared++;
+        if (o.status === "Assigned to Batch" || o.status === "In Transit") inBatches++;
+        if (o.status === "At Pickup Point") atPickup++;
+        if (o.status === "Not Collected") notCollected++;
+
+        if (o.status === "Collected" && o.collectedAt && o.collectedAt.startsWith(todayStr)) {
+          collectedToday++;
+        }
+
+        if (o.status !== "Collected" && o.status !== "Cancelled") {
+          totalActiveValue += o.totalAmount || 0;
+        }
+
+        if (o.outstandingBalance && o.outstandingBalance > 0.01) {
+          withOutstanding++;
+          totalOutstandingValue += o.outstandingBalance;
+        }
+      }
+
+      const activeBatchesCount = batches.filter(b => b.status !== "Completed" && b.status !== "Closed").length;
+
+      return {
+        totalOrders: orders.length,
+        awaitingPreparation: readyToPrep + awaitingPrep,
+        preparedReadyForDispatch: prepared,
+        inTransitBatches: activeBatchesCount,
+        atPickupPoint: atPickup,
+        completedCollectionsToday: collectedToday,
+        totalOutstandingToCollect: totalOutstandingValue,
+        awaitingPreparationCount: awaitingPrep,
+        readyToPrepareCount: readyToPrep,
+        preparedCount: prepared,
+        inBatchesCount: inBatches,
+        atPickupPointCount: atPickup,
+        collectedTodayCount: collectedToday,
+        notCollectedCount: notCollected,
+        ordersWithOutstandingCount: withOutstanding,
+        totalActiveValue,
+        totalOutstandingValue,
+        activeBatchesCount
+      };
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, `businesses/${businessId}/fulfilmentOrders`);
+      return {
+        totalOrders: 0,
+        awaitingPreparation: 0,
+        preparedReadyForDispatch: 0,
+        inTransitBatches: 0,
+        atPickupPoint: 0,
+        completedCollectionsToday: 0,
+        totalOutstandingToCollect: 0,
+        awaitingPreparationCount: 0,
+        readyToPrepareCount: 0,
+        preparedCount: 0,
+        inBatchesCount: 0,
+        atPickupPointCount: 0,
+        collectedTodayCount: 0,
+        notCollectedCount: 0,
+        ordersWithOutstandingCount: 0,
+        totalActiveValue: 0,
+        totalOutstandingValue: 0,
+        activeBatchesCount: 0
+      };
+    }
+  }
+};
+

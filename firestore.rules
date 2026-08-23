@@ -50,13 +50,17 @@ service cloud.firestore {
       // Products Subcollection
       match /products/{productId} {
         allow read: if isMemberOfBusiness(businessId);
-        allow create: if isMemberOfBusiness(businessId) && isValidId(productId) && request.resource.data.businessId == businessId;
-        allow update: if isMemberOfBusiness(businessId) && isValidId(productId) && request.resource.data.businessId == businessId;
+        allow create, update: if isMemberOfBusiness(businessId) && isValidId(productId);
         allow delete: if isMemberOfBusiness(businessId) && isValidId(productId);
       }
 
-      // Categories Subcollection
+      // Categories & ProductCategories Subcollection
       match /categories/{categoryId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(categoryId);
+      }
+
+      match /productCategories/{categoryId} {
         allow read: if isMemberOfBusiness(businessId);
         allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(categoryId);
       }
@@ -76,8 +80,7 @@ service cloud.firestore {
       // Stock Movements Subcollection
       match /stockMovements/{movementId} {
         allow read: if isMemberOfBusiness(businessId);
-        allow create: if isMemberOfBusiness(businessId) && isValidId(movementId) && request.resource.data.businessId == businessId;
-        allow update, delete: if isMemberOfBusiness(businessId) && isValidId(movementId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(movementId);
       }
 
       // Quotations Subcollection
@@ -86,10 +89,64 @@ service cloud.firestore {
         allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(quotationId);
       }
 
+      // Invoices Subcollection
+      match /invoices/{invoiceId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(invoiceId);
+      }
+
       // Receipts Subcollection
       match /receipts/{receiptId} {
         allow read: if isMemberOfBusiness(businessId);
         allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(receiptId);
+      }
+
+      // CashBook Subcollection
+      match /cashBook/{entryId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(entryId);
+      }
+
+      // Bank Accounts Subcollection
+      match /bankAccounts/{accountId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(accountId);
+      }
+
+      // Bank Transactions Subcollection
+      match /bankTransactions/{txnId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(txnId);
+      }
+
+      // Payment Vouchers Subcollection
+      match /paymentVouchers/{voucherId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(voucherId);
+      }
+
+      // Purchase Orders Subcollection
+      match /purchaseOrders/{orderId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(orderId);
+      }
+
+      // Goods Received Notes Subcollection
+      match /goodsReceivedNotes/{grnId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(grnId);
+      }
+
+      // Petty Cash Subcollection
+      match /pettyCash/{entryId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(entryId);
+      }
+
+      // Document Sequences Subcollection
+      match /documentSequences/{seqId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(seqId);
       }
 
       // System Logs Subcollection
@@ -103,6 +160,36 @@ service cloud.firestore {
       match /settings/{settingId} {
         allow read: if isMemberOfBusiness(businessId);
         allow write: if isMemberOfBusiness(businessId);
+      }
+
+      // Counters Subcollection
+      match /counters/{counterId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow write: if isMemberOfBusiness(businessId);
+      }
+
+      // Fulfilment Orders Subcollection
+      match /fulfilmentOrders/{orderId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(orderId);
+      }
+
+      // Pick & Drop Batches Subcollection
+      match /pickDropBatches/{batchId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(batchId);
+      }
+
+      // Collection Tickets Subcollection
+      match /collectionTickets/{ticketId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(ticketId);
+      }
+
+      // Pickup Locations Subcollection
+      match /pickupLocations/{locationId} {
+        allow read: if isMemberOfBusiness(businessId);
+        allow create, update, delete: if isMemberOfBusiness(businessId) && isValidId(locationId);
       }
     }
   }

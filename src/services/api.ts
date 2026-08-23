@@ -15,6 +15,7 @@ import {
   userService as fsUserService,
   purchasingService as fsPurchasingService,
   financialService as fsFinancialService,
+  fulfilmentService as fsFulfilmentService,
 } from "./firestoreApi";
 import { 
   Product, 
@@ -42,7 +43,15 @@ import {
   PettyCashEntry,
   PaymentVoucher,
   DocumentSequenceConfig,
-  FinancialSummaryReport
+  FinancialSummaryReport,
+  FulfilmentOrder,
+  FulfilmentItem,
+  FulfilmentStatus,
+  PickAndDropBatch,
+  CollectionTicket,
+  PickupLocation,
+  FulfilmentSummaryStats,
+  BatchStatus
 } from "../types";
 
 // Axios instance for server-side AI endpoints (Gemini Assist, Document OCR)
@@ -695,3 +704,98 @@ export const documentOcrService = {
     };
   }
 };
+
+// -------------------------------------------------------------
+// FULFILMENT & PICK & DROP SERVICE WRAPPER
+// -------------------------------------------------------------
+export const fulfilmentService = {
+  getSummaryStats: async (): Promise<FulfilmentSummaryStats> => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.getSummaryStats(bId);
+  },
+
+  syncFromInvoices: async (): Promise<FulfilmentOrder[]> => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.syncFromInvoices(bId);
+  },
+
+  getOrders: async (filters?: { status?: string; search?: string; pickupLocation?: string; batchId?: string }): Promise<FulfilmentOrder[]> => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.getOrders(bId, filters);
+  },
+
+  getOneOrder: async (id: string): Promise<FulfilmentOrder> => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.getOneOrder(bId, id);
+  },
+
+  prepareOrder: async (
+    id: string, 
+    payload: { stagingBay?: string; notes?: string; pickupLocation?: string }
+  ): Promise<{ order: FulfilmentOrder; ticket: CollectionTicket }> => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.prepareOrder(bId, id, payload);
+  },
+
+  createBatch: async (payload: {
+    pickupLocation: string;
+    originLocation?: string;
+    driverName?: string;
+    driverPhone?: string;
+    vehicleReg?: string;
+    orderIds: string[];
+    notes?: string;
+  }): Promise<PickAndDropBatch> => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.createBatch(bId, payload);
+  },
+
+  getBatches: async (): Promise<PickAndDropBatch[]> => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.getBatches(bId);
+  },
+
+  getOneBatch: async (id: string): Promise<PickAndDropBatch> => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.getOneBatch(bId, id);
+  },
+
+  updateBatchStatus: async (batchId: string, newStatus: BatchStatus): Promise<PickAndDropBatch> => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.updateBatchStatus(bId, batchId, newStatus);
+  },
+
+  getTicketByToken: async (tokenOrNumber: string): Promise<{ ticket: CollectionTicket; order: FulfilmentOrder; invoice?: Invoice } | null> => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.getTicketByToken(bId, tokenOrNumber);
+  },
+
+  recordCollection: async (payload: {
+    fulfilmentOrderId: string;
+    outcome: "Collected" | "Not Collected";
+    recipientName?: string;
+    recipientPhone?: string;
+    recipientNationalId?: string;
+    signatureCaptured?: boolean;
+    paymentAmount?: number;
+    paymentMethod?: string;
+    bankAccountId?: string;
+    orderChanges?: Array<{ productId: string; newQty: number; reason: string }>;
+    notCollectedReason?: string;
+    notes?: string;
+  }) => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.recordCollection(bId, payload);
+  },
+
+  getPickupLocations: async (): Promise<PickupLocation[]> => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.getPickupLocations(bId);
+  },
+
+  addPickupLocation: async (payload: Partial<PickupLocation>): Promise<PickupLocation> => {
+    const bId = await getActiveBusinessId();
+    return fsFulfilmentService.addPickupLocation(bId, payload);
+  }
+};
+

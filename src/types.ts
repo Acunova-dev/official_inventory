@@ -779,3 +779,225 @@ export interface RecentActivity {
   recentlyCreatedQuotations: Quotation[];
   recentlyCreatedReceipts: Receipt[];
 }
+
+// -------------------------------------------------------------
+// FULFILMENT & PICK & DROP SYSTEM TYPES
+// -------------------------------------------------------------
+export type FulfilmentStatus = 
+  | "Awaiting Stock"
+  | "Ready to Prepare"
+  | "Prepared"
+  | "Ready for Collection"
+  | "Assigned to Batch"
+  | "In Transit"
+  | "At Pickup Point"
+  | "Partially Collected"
+  | "Collected"
+  | "Not Collected"
+  | "Cancelled";
+
+export type BatchStatus =
+  | "Draft"
+  | "Preparing"
+  | "Ready for Dispatch"
+  | "In Transit"
+  | "At Pickup Point"
+  | "Completed"
+  | "Closed";
+
+export interface FulfilmentItem {
+  productId: string;
+  productName: string;
+  sku?: string;
+  orderedQty: number;
+  preparedQty: number;
+  collectedQty: number;
+  returnedQty?: number;
+  unitPrice: number;
+  totalPrice: number;
+  stockStatus?: "In Stock" | "Low Stock" | "Out of Stock";
+  availableWarehouseStock?: number;
+  allocatedBay?: string;
+}
+
+export interface OrderItemChangeRecord {
+  productId: string;
+  productName: string;
+  originalQty: number;
+  newHandedOverQty: number;
+  returnedQty: number;
+  unitPrice: number;
+  differenceAmount: number;
+}
+
+export interface FulfilmentChangeLog {
+  id: string;
+  timestamp: string;
+  userName: string;
+  userEmail: string;
+  userUid?: string;
+  reason: string;
+  itemChanges: OrderItemChangeRecord[];
+  totalOriginalAmount: number;
+  totalNewAmount: number;
+  balanceAdjustment: number;
+  invoiceAdjustmentRecorded?: boolean;
+}
+
+export interface FulfilmentOrder {
+  id: string;
+  orderNumber: string; // FO-2026-000001
+  invoiceId: string;
+  invoiceNumber: string;
+  quotationId?: string;
+  quotationNumber?: string;
+  customerId: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  items: FulfilmentItem[];
+  totalAmount: number;
+  amountPaid: number;
+  outstandingBalance: number;
+  paymentStatus: "Paid" | "Partially Paid" | "Unpaid" | "Overdue";
+  currency?: string;
+  status: FulfilmentStatus;
+  pickupLocation: string;
+  assignedBatchId?: string;
+  assignedBatchNumber?: string;
+  ticketId?: string;
+  ticketNumber?: string;
+  ticketToken?: string; // Cryptographic verification token
+  stagingBay?: string;
+  notes?: string;
+  
+  // Preparation Tracking
+  preparedBy?: string;
+  preparedByUid?: string;
+  preparedAt?: string;
+  
+  // Collection Outcome Tracking
+  collectedByAgent?: string;
+  collectedByAgentUid?: string;
+  collectedAt?: string;
+  recipientName?: string;
+  recipientPhone?: string;
+  recipientNationalId?: string;
+  signatureCaptured?: boolean;
+  paymentCollectedAtDesk?: number;
+  paymentReceiptNumber?: string;
+  notCollectedReason?: string;
+  
+  // Audit Trail of Changes During Handover
+  changeLogs?: FulfilmentChangeLog[];
+  
+  createdByUid?: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PickAndDropBatchOrderSummary {
+  fulfilmentOrderId: string;
+  invoiceNumber: string;
+  customerName: string;
+  customerPhone?: string;
+  ticketNumber: string;
+  itemCount: number;
+  totalQty: number;
+  totalValue: number;
+  outstandingBalance: number;
+  status: FulfilmentStatus;
+}
+
+export interface PickAndDropBatch {
+  id: string;
+  batchNumber: string; // PND-2026-000001
+  pickupLocation: string;
+  originLocation: string;
+  driverName?: string;
+  driverPhone?: string;
+  vehicleReg?: string;
+  orderIds: string[];
+  orders: PickAndDropBatchOrderSummary[];
+  status: BatchStatus;
+  totalOrders: number;
+  totalItems: number;
+  totalValue: number;
+  totalOutstanding: number;
+  notes?: string;
+  dispatchedAt?: string;
+  dispatchedBy?: string;
+  arrivedAt?: string;
+  arrivedBy?: string;
+  completedAt?: string;
+  completedBy?: string;
+  createdBy: string;
+  createdByUid?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CollectionTicket {
+  id: string;
+  ticketNumber: string; // PD-001
+  token: string; // Secure token for QR lookup
+  fulfilmentOrderId: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  customerId: string;
+  customerName: string;
+  customerPhone?: string;
+  pickupLocation: string;
+  batchId?: string;
+  batchNumber?: string;
+  status: FulfilmentStatus;
+  totalAmount: number;
+  amountPaid: number;
+  outstandingBalance: number;
+  paymentStatus: "Paid" | "Partially Paid" | "Unpaid";
+  items: Array<{
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+  }>;
+  createdAt: string;
+  expiresAt?: string;
+  collectedAt?: string;
+  collectedByAgent?: string;
+}
+
+export interface PickupLocation {
+  id: string;
+  name: string;
+  code: string;
+  address: string;
+  city?: string;
+  contactPerson?: string;
+  contactPhone?: string;
+  isDefault?: boolean;
+  status: "Active" | "Inactive";
+}
+
+export interface FulfilmentSummaryStats {
+  totalOrders: number;
+  awaitingPreparation: number;
+  preparedReadyForDispatch: number;
+  inTransitBatches: number;
+  atPickupPoint: number;
+  completedCollectionsToday: number;
+  totalOutstandingToCollect: number;
+  awaitingPreparationCount?: number;
+  readyToPrepareCount?: number;
+  preparedCount?: number;
+  inBatchesCount?: number;
+  atPickupPointCount?: number;
+  collectedTodayCount?: number;
+  notCollectedCount?: number;
+  ordersWithOutstandingCount?: number;
+  totalActiveValue?: number;
+  totalOutstandingValue?: number;
+  activeBatchesCount?: number;
+}
+

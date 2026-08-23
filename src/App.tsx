@@ -16,11 +16,17 @@ import { InventoryInsights } from "./pages/InventoryInsights";
 import { UsersManagement } from "./pages/Users";
 import { Settings } from "./pages/Settings";
 import { SystemLogs } from "./pages/SystemLogs";
+import { FinancialOverviewPage } from "./pages/financial/FinancialOverviewPage";
 import { CashBookPage } from "./pages/financial/CashBookPage";
 import { BankAccountsPage } from "./pages/financial/BankAccountsPage";
 import { PettyCashPage } from "./pages/financial/PettyCashPage";
 import { PaymentVouchersPage } from "./pages/financial/PaymentVouchersPage";
 import { FinancialReportsPage } from "./pages/financial/FinancialReportsPage";
+import { FulfilmentPage } from "./pages/FulfilmentPage";
+import { FulfilmentOrdersPage } from "./pages/fulfilment/FulfilmentOrdersPage";
+import { PickDropBatchesPage } from "./pages/fulfilment/PickDropBatchesPage";
+import { CollectionDeskScanPage } from "./pages/fulfilment/CollectionDeskScanPage";
+import { CollectionTicketsPage } from "./pages/fulfilment/CollectionTicketsPage";
 import { OrderBookPage } from "./pages/purchasing/OrderBookPage";
 import { GoodsReceivedPage } from "./pages/purchasing/GoodsReceivedPage";
 import { Loader2 } from "lucide-react";
@@ -169,7 +175,15 @@ export default function App() {
               } 
             />
 
-            {/* Financial Books Routes */}
+            {/* Financial Overview & Ledgers Workspace */}
+            <Route 
+              path="/financial" 
+              element={
+                <ProtectedRoute requiredPermission="financials.view" moduleName="Financial Overview & Hub">
+                  <FinancialOverviewPage />
+                </ProtectedRoute>
+              } 
+            />
             <Route 
               path="/financial/cashbook" 
               element={
@@ -207,6 +221,48 @@ export default function App() {
               element={
                 <ProtectedRoute requiredPermission="reports.view.financial" moduleName="Financial Control Reports">
                   <FinancialReportsPage />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Fulfilment & Logistics Workspace */}
+            <Route 
+              path="/fulfilment" 
+              element={
+                <ProtectedRoute requiredPermission="fulfilment.view" moduleName="Fulfilment & Distribution Hub">
+                  <FulfilmentPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/fulfilment/orders" 
+              element={
+                <ProtectedRoute requiredPermission="fulfilment.prepare" moduleName="Fulfilment Orders & Preparation">
+                  <FulfilmentOrdersPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/fulfilment/batches" 
+              element={
+                <ProtectedRoute requiredPermission="fulfilment.dispatch" moduleName="Pick & Drop Dispatch Batches">
+                  <PickDropBatchesPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/fulfilment/scan" 
+              element={
+                <ProtectedRoute requiredPermission="fulfilment.collect" moduleName="Collection Desk & Scanner">
+                  <CollectionDeskScanPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/fulfilment/collections" 
+              element={
+                <ProtectedRoute requiredPermission="fulfilment.view" moduleName="Customer Collection Tickets">
+                  <CollectionTicketsPage />
                 </ProtectedRoute>
               } 
             />

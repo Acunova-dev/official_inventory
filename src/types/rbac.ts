@@ -27,6 +27,12 @@ export type Permission =
   | "financials.view"
   | "financials.manage"
   | "vouchers.approve"
+
+  // Fulfilment & Dispatch
+  | "fulfilment.view"
+  | "fulfilment.prepare"
+  | "fulfilment.dispatch"
+  | "fulfilment.collect"
   
   // Reporting & Insights
   | "reports.view.sales"
@@ -65,6 +71,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
       "stock.view", "stock.adjust", "stock.transfer",
       "sales.view", "sales.create", "sales.edit_draft", "sales.delete_draft", "receipts.view", "receipts.create",
       "purchasing.view", "purchasing.create", "purchasing.receive", "suppliers.manage",
+      "fulfilment.view", "fulfilment.prepare", "fulfilment.dispatch", "fulfilment.collect",
       "financials.view", "financials.manage", "vouchers.approve",
       "reports.view.sales", "reports.view.inventory", "reports.view.financial",
       "users.manage", "settings.manage", "system_logs.view", "account.view"
@@ -77,6 +84,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
     permissions: [
       "sales.view", "sales.create", "sales.edit_draft",
       "receipts.view", "receipts.create",
+      "fulfilment.view", "fulfilment.collect",
       "products.view", "stock.view",
       "reports.view.sales",
       "account.view"
@@ -90,6 +98,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
       "products.view", "products.create", "products.edit", "products.delete", "categories.manage",
       "stock.view", "stock.adjust", "stock.transfer",
       "purchasing.view", "purchasing.create", "purchasing.receive", "suppliers.manage",
+      "fulfilment.view", "fulfilment.prepare", "fulfilment.dispatch", "fulfilment.collect",
       "reports.view.inventory",
       "account.view"
     ]
@@ -102,6 +111,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
       "products.view", "stock.view",
       "sales.view", "sales.create", "sales.edit_draft",
       "receipts.view", "receipts.create",
+      "fulfilment.view", "fulfilment.collect",
       "purchasing.view",
       "reports.view.sales",
       "account.view"
@@ -114,6 +124,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
     permissions: [
       "financials.view", "financials.manage", "vouchers.approve",
       "sales.view", "receipts.view",
+      "fulfilment.view",
       "purchasing.view",
       "reports.view.sales", "reports.view.inventory", "reports.view.financial",
       "account.view"
@@ -121,11 +132,12 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
   },
   "Warehouse Clerk": {
     name: "Warehouse Clerk",
-    description: "Operational warehouse role handling stock transfers, count adjustments, and goods receiving verification.",
+    description: "Operational warehouse role handling stock transfers, count adjustments, order preparation, and goods receiving verification.",
     badgeColor: "bg-indigo-100 text-indigo-800 border-indigo-200",
     permissions: [
       "products.view", "stock.view", "stock.adjust", "stock.transfer",
       "purchasing.view", "purchasing.receive",
+      "fulfilment.view", "fulfilment.prepare", "fulfilment.dispatch", "fulfilment.collect",
       "reports.view.inventory",
       "account.view"
     ]
@@ -136,6 +148,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
     badgeColor: "bg-teal-100 text-teal-800 border-teal-200",
     permissions: [
       "purchasing.view", "purchasing.create", "suppliers.manage",
+      "fulfilment.view",
       "products.view", "stock.view",
       "reports.view.inventory",
       "account.view"
