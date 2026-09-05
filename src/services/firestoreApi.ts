@@ -3,8 +3,8 @@ import {
   doc, 
   getDoc, 
   getDocs, 
-  setDoc, 
-  updateDoc, 
+  setDoc as rawSetDoc, 
+  updateDoc as rawUpdateDoc, 
   deleteDoc, 
   query, 
   where, 
@@ -64,6 +64,44 @@ export async function uploadImageToStorage(file: File, folder: string = "product
   await uploadBytes(storageRef, file);
   return await getDownloadURL(storageRef);
 }
+
+/**
+ * Recursively strips `undefined` values from an object or array.
+ * Firestore will throw a runtime error if any property in a document payload is `undefined`.
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as unknown as T;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .filter(item => item !== undefined)
+      .map(item => sanitizeForFirestore(item)) as unknown as T;
+  }
+  if (typeof data === "object" && !(data instanceof Date)) {
+    const res: any = {};
+    for (const [key, val] of Object.entries(data)) {
+      if (val !== undefined) {
+        res[key] = sanitizeForFirestore(val);
+      }
+    }
+    return res;
+  }
+  return data;
+}
+
+export async function setDoc(docRef: any, data: any, options?: any) {
+  const sanitized = sanitizeForFirestore(data);
+  return options ? rawSetDoc(docRef, sanitized, options) : rawSetDoc(docRef, sanitized);
+}
+
+export async function updateDoc(docRef: any, data: any) {
+  const sanitized = sanitizeForFirestore(data);
+  return rawUpdateDoc(docRef, sanitized);
+}
+
+export const safeSetDoc = setDoc;
+export const safeUpdateDoc = updateDoc;
 
 // -------------------------------------------------------------
 // PRODUCT SERVICE
@@ -901,10 +939,10 @@ export const quotationService = {
       totalImportCosts: importCost,
       allowZiGPayments: allowZiG,
       allow_zig_payments: allowZiG,
-      interbankRate: iRate || undefined,
-      interbank_rate: iRate || undefined,
-      streetRate: sRate || undefined,
-      street_rate: sRate || undefined,
+      interbankRate: iRate || 0,
+      interbank_rate: iRate || 0,
+      streetRate: sRate || 0,
+      street_rate: sRate || 0,
       calculatedMultiplier: multiplier,
       calculated_multiplier: multiplier,
       total,
@@ -1059,10 +1097,10 @@ export const quotationService = {
       totalImportCosts: importCost,
       allowZiGPayments: allowZiG,
       allow_zig_payments: allowZiG,
-      interbankRate: iRate || undefined,
-      interbank_rate: iRate || undefined,
-      streetRate: sRate || undefined,
-      street_rate: sRate || undefined,
+      interbankRate: iRate || 0,
+      interbank_rate: iRate || 0,
+      streetRate: sRate || 0,
+      street_rate: sRate || 0,
       calculatedMultiplier: multiplier,
       calculated_multiplier: multiplier,
       status: quoteStatus,
@@ -1078,7 +1116,7 @@ export const quotationService = {
     };
 
     try {
-      await setDoc(doc(db, "businesses", businessId, "quotations", id), { ...quote, businessId });
+      await safeSetDoc(doc(db, "businesses", businessId, "quotations", id), { ...quote, businessId });
       
       await systemLogService.logAction(businessId, {
         category: "Quotation Management",
@@ -1268,10 +1306,10 @@ export const quotationService = {
         totalImportCosts: importCost,
         allowZiGPayments: allowZiG,
         allow_zig_payments: allowZiG,
-        interbankRate: iRate || undefined,
-        interbank_rate: iRate || undefined,
-        streetRate: sRate || undefined,
-        street_rate: sRate || undefined,
+        interbankRate: iRate || 0,
+        interbank_rate: iRate || 0,
+        streetRate: sRate || 0,
+        street_rate: sRate || 0,
         calculatedMultiplier: multiplier,
         calculated_multiplier: multiplier,
         total,
@@ -1283,7 +1321,7 @@ export const quotationService = {
 
       delete updateData.items;
 
-      await updateDoc(refDoc, updateData);
+      await safeUpdateDoc(refDoc, updateData);
       const snap = await getDoc(refDoc);
       const updatedQuote = { id: snap.id, ...snap.data() } as Quotation;
 
@@ -1813,17 +1851,17 @@ export const financialService = {
       supplierEmail,
       supplierPhone,
       supplierAddress,
-      poId: payload.poId,
-      poNumber: poNumber || undefined,
-      supplierInvoiceNo: payload.supplierInvoiceNo,
+      poId: payload.poId || "",
+      poNumber: poNumber || "",
+      supplierInvoiceNo: payload.supplierInvoiceNo || "",
       date: new Date().toISOString().split("T")[0],
       paymentDate: new Date().toISOString().split("T")[0],
       paymentMethod: payload.paymentMethod || "Cash",
       amount: Number(payload.amount),
       currency: "$",
       purpose: payload.purpose || `Vendor payment to ${supplierName}`,
-      bankAccountId: payload.bankAccountId,
-      bankAccountName: bankAccountName || undefined,
+      bankAccountId: payload.bankAccountId || "",
+      bankAccountName: bankAccountName || "",
       paidBy: userName,
       status: "Issued",
       notes: payload.notes || "",
@@ -1832,7 +1870,7 @@ export const financialService = {
     };
 
     try {
-      await setDoc(doc(db, "businesses", businessId, "paymentVouchers", id), { ...pv, businessId });
+      await safeSetDoc(doc(db, "businesses", businessId, "paymentVouchers", id), { ...pv, businessId });
 
       if (payload.paymentMethod === "Cash") {
         await financialService.createCashAdjustment(businessId, {
@@ -2004,7 +2042,8 @@ export const receiptService = {
       try {
         const bSnap = await getDoc(doc(db, "businesses", businessId, "bankAccounts", payload.bankAccountId));
         if (bSnap.exists()) {
-          bankAccountName = (bSnap.data() as BankAccount).accountName;
+          const bData = bSnap.data() as any;
+          bankAccountName = bData?.accountName || bData?.bankName || "";
         }
       } catch (e) {
         console.warn("Could not fetch bank account for receipt:", e);
@@ -2034,8 +2073,8 @@ export const receiptService = {
       discountAmount,
       total,
       paymentMethod: payload.paymentMethod || "Cash",
-      bankAccountId: payload.bankAccountId,
-      bankAccountName: bankAccountName || undefined,
+      bankAccountId: payload.bankAccountId || "",
+      bankAccountName: bankAccountName || "",
       referenceNumber: payload.referenceNumber || "",
       notes: payload.notes || "",
       createdBy: activeUserName,
@@ -2052,7 +2091,7 @@ export const receiptService = {
     };
 
     try {
-      await setDoc(doc(db, "businesses", businessId, "receipts", id), { ...receipt, businessId });
+      await safeSetDoc(doc(db, "businesses", businessId, "receipts", id), { ...receipt, businessId });
 
       // Post financial transaction to source of truth
       if (payload.bankAccountId && payload.paymentMethod !== "Cash") {
@@ -2320,8 +2359,8 @@ export const invoiceService = {
     const invoice: Invoice = {
       id,
       invoiceNumber,
-      quotationId: payload.quotationId,
-      quotationNumber: payload.quotationNumber,
+      quotationId: payload.quotationId || "",
+      quotationNumber: payload.quotationNumber || "",
       customerId: payload.customerId,
       customerName,
       customerEmail,
@@ -2355,7 +2394,7 @@ export const invoiceService = {
     };
 
     try {
-      await setDoc(doc(db, "businesses", businessId, "invoices", id), { ...invoice, businessId });
+      await safeSetDoc(doc(db, "businesses", businessId, "invoices", id), { ...invoice, businessId });
 
       await systemLogService.logAction(businessId, {
         category: "Invoice Management",
@@ -2390,7 +2429,7 @@ export const invoiceService = {
         updatedByEmail: userEmail,
         updatedAt: nowIso
       };
-      await updateDoc(refDoc, updateData);
+      await safeUpdateDoc(refDoc, updateData);
       const snap = await getDoc(refDoc);
       const updatedInv = { id: snap.id, ...snap.data() } as Invoice;
 
@@ -3964,14 +4003,14 @@ export const fulfilmentService = {
       changeLogs,
       collectedByAgent: activeUserName,
       collectedByAgentUid: userUid,
-      collectedAt: payload.outcome === "Collected" ? nowIso : undefined,
+      collectedAt: payload.outcome === "Collected" ? nowIso : "",
       recipientName: payload.recipientName || order.customerName,
       recipientPhone: payload.recipientPhone || order.customerPhone,
       recipientNationalId: payload.recipientNationalId || "",
       signatureCaptured: payload.signatureCaptured || false,
       paymentCollectedAtDesk: payload.paymentAmount || 0,
-      paymentReceiptNumber: issuedReceipt?.receiptNumber || undefined,
-      notCollectedReason: payload.outcome === "Not Collected" ? (payload.notCollectedReason || "Customer did not arrive") : undefined,
+      paymentReceiptNumber: issuedReceipt?.receiptNumber || "",
+      notCollectedReason: payload.outcome === "Not Collected" ? (payload.notCollectedReason || "Customer did not arrive") : "",
       notes: payload.notes ? (order.notes ? `${order.notes}\n[Handover Note]: ${payload.notes}` : payload.notes) : order.notes,
       amountPaid: order.amountPaid,
       outstandingBalance: order.outstandingBalance,
@@ -3979,7 +4018,7 @@ export const fulfilmentService = {
       updatedAt: nowIso
     };
 
-    await updateDoc(foRef, updatePayload);
+    await safeUpdateDoc(foRef, updatePayload);
 
     await systemLogService.logAction(businessId, {
       category: "Customer Collection",
