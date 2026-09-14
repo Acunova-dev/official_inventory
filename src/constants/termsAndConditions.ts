@@ -9,23 +9,23 @@ export const QUOTATION_TERMS_AND_CONDITIONS: TermClause[] = [
     content: "This quotation is valid for 30 calendar days from the date of issue unless otherwise stated."
   },
   {
-    title: "Pricing, Taxes & Duties",
-    content: "All prices quoted are in United States Dollars (USD). Import costs, including freight, customs duties, and related charges where applicable, are indicated separately and are based on estimates available at the time of quotation. Actual import costs will be confirmed once the shipment has been received and processed by the freight forwarder. Where the actual import costs differ from the estimate provided, the customer will be advised before the order is finalized or dispatched."
+    title: "Pricing and Availability",
+    content: "All prices are quoted in United States Dollars (USD). Availability of goods is subject to confirmation at the time of order."
   },
   {
-    title: "Availability of Goods",
-    content: "The items quoted may be supplied from existing stock and/or procured specifically for this order. Availability of specially procured items is subject to supplier confirmation at the time of order."
+    title: "Order Confirmation & Lead Time",
+    content: "Orders will be processed upon confirmation and fulfillment of the applicable payment terms. Estimated delivery or collection periods will be communicated to the customer and may vary depending on product availability and supplier lead times."
   },
   {
-    title: "Order Confirmation, Lead Time & Delivery",
-    content: "Procurement of goods will commence upon receipt of an official Purchase Order (PO) and fulfillment of the agreed payment terms. Estimated delivery periods are generally 14–30 working days unless otherwise specified in the quotation. Delivery periods are estimates only and may vary due to supplier availability, manufacturing schedules, shipping, customs clearance, or other factors beyond our reasonable control."
+    title: "Pre-Order Payment Terms",
+    content: "For pre-orders, a 50% deposit is required to confirm the order and commence procurement. Once the ordered items have been received by Acunova Pvt Ltd, the customer will be notified. The remaining 50% balance, together with any applicable delivery charges, must be paid in full before the items are dispatched or delivered."
   },
   {
-    title: "Payment Terms, Warranty & Inspection",
-    content: "Full payment must be made before delivery of the goods unless otherwise agreed in writing by Acunova Pvt Ltd. Products are supplied with the applicable manufacturer's warranty where available. The customer is responsible for inspecting all goods upon delivery and must report any shortages, incorrect items, or visible damage within 48 hours of receipt."
+    title: "Warranty & Inspection",
+    content: "Products are supplied with the applicable manufacturer's warranty where available. Customers must inspect goods upon delivery and report any shortages, incorrect items, or visible damage within 48 hours of receipt."
   },
   {
     title: "Acceptance",
-    content: "Acceptance of this quotation or issuance of a Purchase Order constitutes acceptance of these Terms & Conditions."
+    content: "Acceptance of this quotation or confirmation of an order constitutes acceptance of these Terms & Conditions."
   }
 ];
