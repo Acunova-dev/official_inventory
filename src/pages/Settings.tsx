@@ -3,10 +3,20 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "../components/Layout";
 import { settingsService } from "../services/api";
 import { CompanySettings } from "../types";
-import { DEFAULT_COMPANY_SETTINGS, getMergedCompanySettings } from "../constants/defaultSettings";
+import { useAuth } from "../context/AuthContext";
+import { 
+  DEFAULT_COMPANY_SETTINGS, 
+  getMergedCompanySettings,
+  DEFAULT_QUOTATION_TERMS,
+  DEFAULT_INVOICE_TERMS,
+  DEFAULT_RECEIPT_TERMS,
+  DEFAULT_PURCHASE_ORDER_TERMS,
+  DEFAULT_DELIVERY_TERMS,
+  DEFAULT_GENERAL_TERMS
+} from "../constants/defaultSettings";
+import { parseTermsStringToClauses } from "../constants/termsAndConditions";
 import { 
   Percent, 
-  CloudLightning, 
   Building, 
   FileText,
   Upload,
@@ -20,7 +30,15 @@ import {
   FileCheck,
   Loader2,
   Palette,
-  Sparkles
+  Sparkles,
+  ShieldCheck,
+  Lock,
+  RotateCcw,
+  Receipt,
+  FileSpreadsheet,
+  Truck,
+  ScrollText,
+  Scale
 } from "lucide-react";
 
 const PRESET_COLORS = [
@@ -32,9 +50,71 @@ const PRESET_COLORS = [
   { name: "Amber Gold", value: "#d97706" },
 ];
 
+type TermsDocType = "quotation" | "invoice" | "receipt" | "po" | "delivery" | "general";
+
+const TERMS_CONFIGS: Record<TermsDocType, {
+  label: string;
+  field: keyof CompanySettings;
+  icon: any;
+  description: string;
+  badge: string;
+  documentName: string;
+}> = {
+  quotation: {
+    label: "Quotations (Proposals)",
+    field: "quotationTerms",
+    icon: FileText,
+    description: "Printed on all official Quotations & Proposals when 'Include Terms & Conditions' is enabled.",
+    badge: "Quotation Terms",
+    documentName: "Proposals & Quotations"
+  },
+  invoice: {
+    label: "Sales Invoices",
+    field: "invoiceTerms",
+    icon: FileSpreadsheet,
+    description: "Appears at the base of every Sales Invoice covering payment due dates, bank settlement, and ownership.",
+    badge: "Invoice Terms",
+    documentName: "Sales Invoices"
+  },
+  receipt: {
+    label: "Official Receipts",
+    field: "receiptTerms",
+    icon: Receipt,
+    description: "Printed on customer receipts covering returns policy, warranty validation, and payment proof.",
+    badge: "Receipt Terms",
+    documentName: "Sales Receipts"
+  },
+  po: {
+    label: "Purchase Orders",
+    field: "purchaseOrderTerms",
+    icon: Building2,
+    description: "Printed on procurement purchase orders covering item specs, quality verification, and delivery.",
+    badge: "Purchase Order Terms",
+    documentName: "Supplier Purchase Orders"
+  },
+  delivery: {
+    label: "Delivery Notes & GRN",
+    field: "deliveryTerms",
+    icon: Truck,
+    description: "Printed on delivery notes and goods received notes covering transit condition, shortages, and risk.",
+    badge: "Delivery / GRN Terms",
+    documentName: "Delivery Notes & GRN"
+  },
+  general: {
+    label: "General Commercial Terms",
+    field: "generalTerms",
+    icon: Scale,
+    description: "Master business terms and condition clauses applicable to general trade and framework operations.",
+    badge: "Master Trading Terms",
+    documentName: "Master Agreement"
+  }
+};
+
 export const Settings: React.FC = () => {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const isPrincipalUser = user?.role === "Principal Admin";
 
   const { data: serverSettings, isLoading } = useQuery({
     queryKey: ["company-settings"],
@@ -42,6 +122,7 @@ export const Settings: React.FC = () => {
   });
 
   const [formState, setFormState] = useState<CompanySettings>(DEFAULT_COMPANY_SETTINGS);
+  const [activeTermsTab, setActiveTermsTab] = useState<TermsDocType>("quotation");
 
   useEffect(() => {
     if (serverSettings) {
@@ -54,12 +135,49 @@ export const Settings: React.FC = () => {
     onSuccess: (updated) => {
       queryClient.setQueryData(["company-settings"], updated);
       queryClient.invalidateQueries({ queryKey: ["company-settings"] });
-      showToast("PDF document branding & header settings saved successfully!", "success");
+      showToast("PDF document branding & legal terms saved successfully!", "success");
     },
     onError: (err: any) => {
       showToast(err.response?.data?.error || "Failed to update system settings", "error");
     }
   });
+
+  const handleResetTerms = (type: TermsDocType) => {
+    if (!isPrincipalUser) {
+      showToast("Only Principal Administrators can reset legal terms.", "error");
+      return;
+    }
+    let defaultVal = "";
+    let fieldKey: keyof CompanySettings = "quotationTerms";
+    switch (type) {
+      case "quotation":
+        defaultVal = DEFAULT_QUOTATION_TERMS;
+        fieldKey = "quotationTerms";
+        break;
+      case "invoice":
+        defaultVal = DEFAULT_INVOICE_TERMS;
+        fieldKey = "invoiceTerms";
+        break;
+      case "receipt":
+        defaultVal = DEFAULT_RECEIPT_TERMS;
+        fieldKey = "receiptTerms";
+        break;
+      case "po":
+        defaultVal = DEFAULT_PURCHASE_ORDER_TERMS;
+        fieldKey = "purchaseOrderTerms";
+        break;
+      case "delivery":
+        defaultVal = DEFAULT_DELIVERY_TERMS;
+        fieldKey = "deliveryTerms";
+        break;
+      case "general":
+        defaultVal = DEFAULT_GENERAL_TERMS;
+        fieldKey = "generalTerms";
+        break;
+    }
+    setFormState((prev) => ({ ...prev, [fieldKey]: defaultVal }));
+    showToast(`Restored standard template for ${TERMS_CONFIGS[type].label}!`, "info");
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -579,6 +697,206 @@ export const Settings: React.FC = () => {
               </div>
             </div>
 
+            {/* 8. MASTER LEGAL TERMS & CONDITIONS (ALL DOCUMENT TYPES) */}
+            <div className="space-y-5 pt-4 border-t border-slate-100" id="section-legal-terms-conditions">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <ScrollText size={18} className="text-blue-600 shrink-0" />
+                  <div>
+                    <h3 className="font-bold text-xs uppercase tracking-wider text-slate-900">
+                      8. Master Legal Terms & Conditions (All Document Types)
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Configure official terms, warranties, payment rules, and return policies for all printed customer and supplier documents.
+                    </p>
+                  </div>
+                </div>
+
+                {isPrincipalUser ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-50 text-purple-800 text-[11px] font-bold rounded-lg border border-purple-200">
+                    <ShieldCheck size={14} className="text-purple-600" />
+                    <span>Principal Admin: Edit Access Granted</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 text-[11px] font-bold rounded-lg border border-amber-200">
+                    <Lock size={14} className="text-amber-600" />
+                    <span>Principal Restricted: View Only</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Security Authorization State Banner */}
+              {isPrincipalUser ? (
+                <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-2xl flex items-start gap-3.5">
+                  <div className="p-2 bg-purple-600 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div className="space-y-0.5 flex-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-purple-950 uppercase tracking-wide">Principal User Security Authorization Active</span>
+                      <span className="px-2 py-0.5 bg-purple-200 text-purple-900 text-[10px] font-mono font-bold rounded">
+                        Full Legal Terms Override
+                      </span>
+                    </div>
+                    <p className="text-purple-800 text-[11px] leading-relaxed">
+                      As a Principal Administrator, you have full authority to edit and configure Terms & Conditions across all document types. All modifications saved will be reflected on newly generated PDF quotations, invoices, receipts, and order documents.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-2xl flex items-start gap-3.5">
+                  <div className="p-2 bg-amber-600 text-white rounded-xl shadow-xs shrink-0 mt-0.5">
+                    <Lock size={18} />
+                  </div>
+                  <div className="space-y-0.5 flex-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-amber-950 uppercase tracking-wide">Principal Administrator Restricted</span>
+                      <span className="px-2 py-0.5 bg-amber-200 text-amber-900 text-[10px] font-mono font-bold rounded">
+                        Role: {user?.role || "Staff Member"}
+                      </span>
+                    </div>
+                    <p className="text-amber-800 text-[11px] leading-relaxed">
+                      Only users with the <strong className="font-bold text-amber-950">Principal Admin</strong> role can edit document legal terms and conditions. The active legal clauses are displayed below in read-only mode for your reference.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Document Type Selector Tabs */}
+              <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100 rounded-xl border border-slate-200">
+                {(Object.keys(TERMS_CONFIGS) as TermsDocType[]).map((tabKey) => {
+                  const cfg = TERMS_CONFIGS[tabKey];
+                  const Icon = cfg.icon;
+                  const isActive = activeTermsTab === tabKey;
+                  const currentText = (formState[cfg.field] as string) || "";
+                  const clauseCount = parseTermsStringToClauses(currentText).length;
+
+                  return (
+                    <button
+                      key={tabKey}
+                      type="button"
+                      onClick={() => setActiveTermsTab(tabKey)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        isActive
+                          ? "bg-white text-blue-700 shadow-xs border border-slate-200"
+                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                      }`}
+                    >
+                      <Icon size={14} className={isActive ? "text-blue-600" : "text-slate-500"} />
+                      <span>{cfg.label}</span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                        isActive ? "bg-blue-100 text-blue-800" : "bg-slate-200 text-slate-600"
+                      }`}>
+                        {clauseCount}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Active Tab Terms Editor & Live Clauses Breakdown */}
+              {(() => {
+                const currentCfg = TERMS_CONFIGS[activeTermsTab];
+                const currentText = (formState[currentCfg.field] as string) || "";
+                const parsedClauses = parseTermsStringToClauses(currentText);
+                const lineCount = currentText ? currentText.split("\n").length : 0;
+                const wordCount = currentText ? currentText.trim().split(/\s+/).filter(Boolean).length : 0;
+
+                return (
+                  <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-200/80">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs uppercase tracking-wider text-slate-900">
+                            {currentCfg.label} — Official Document Terms
+                          </span>
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-mono font-bold rounded">
+                            {currentCfg.badge}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                          {currentCfg.description}
+                        </p>
+                      </div>
+
+                      {isPrincipalUser && (
+                        <button
+                          type="button"
+                          onClick={() => handleResetTerms(activeTermsTab)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold transition-all shadow-2xs shrink-0 cursor-pointer"
+                          title="Restore default pre-formatted legal clauses"
+                        >
+                          <RotateCcw size={12} className="text-slate-500" />
+                          <span>Reset to Standard Template</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Textarea Editor */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-[10px] font-mono text-slate-500">
+                        <span>
+                          {isPrincipalUser ? "Edit clauses below (use numbered headings e.g. '1. Heading' followed by paragraph text):" : "View-only terms display:"}
+                        </span>
+                        <div className="flex items-center gap-3">
+                          <span>{lineCount} lines</span>
+                          <span>•</span>
+                          <span>{wordCount} words</span>
+                          <span>•</span>
+                          <span>{parsedClauses.length} parsed clauses</span>
+                        </div>
+                      </div>
+
+                      <textarea
+                        name={currentCfg.field}
+                        value={currentText}
+                        onChange={handleInputChange}
+                        readOnly={!isPrincipalUser}
+                        disabled={!isPrincipalUser}
+                        rows={11}
+                        className={`w-full rounded-xl p-3.5 text-xs font-mono leading-relaxed transition-all focus:outline-hidden ${
+                          isPrincipalUser
+                            ? "bg-white border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
+                            : "bg-slate-100/90 border border-slate-200 text-slate-600 cursor-not-allowed select-text"
+                        }`}
+                        placeholder={`Enter legal clauses and notices for ${currentCfg.documentName}...`}
+                      />
+                    </div>
+
+                    {/* Live Visual Clause Breakdown */}
+                    <div className="space-y-2 pt-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                        <div className="flex items-center gap-1.5">
+                          <Eye size={13} className="text-blue-600" />
+                          <span>Document Print Preview ({parsedClauses.length} Active Clauses)</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-500">Matches Generated PDF Output</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto p-1 pr-2">
+                        {parsedClauses.map((clause, idx) => (
+                          <div
+                            key={idx}
+                            className="bg-white p-3 rounded-xl border border-slate-200/90 shadow-2xs space-y-1 text-slate-700"
+                          >
+                            <p className="font-bold text-[11px] text-slate-900 flex items-center gap-1.5">
+                              <span className="h-4 w-4 rounded-full bg-blue-50 text-blue-700 text-[9px] font-mono font-bold flex items-center justify-center shrink-0">
+                                {idx + 1}
+                              </span>
+                              <span>{clause.title}</span>
+                            </p>
+                            <p className="text-[10.5px] text-slate-600 leading-relaxed font-sans pl-5">
+                              {clause.content}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* LIVE REAL-TIME PDF LETTERHEAD PREVIEW CARD */}
             <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-200">
@@ -771,7 +1089,7 @@ export const Settings: React.FC = () => {
               ) : (
                 <Check size={16} />
               )}
-              <span>Save PDF Branding & Settings</span>
+              <span>Save PDF Branding & Legal Terms</span>
             </button>
           </div>
 
@@ -799,27 +1117,24 @@ export const Settings: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-slate-900 text-white rounded-2xl p-6 border border-slate-800 space-y-4 shadow-xl">
-            <div className="flex items-center gap-2 pb-3 border-b border-slate-800 text-blue-400">
-              <CloudLightning size={16} />
-              <span className="font-bold text-xs uppercase tracking-widest text-slate-350">Service API Logs & Tunnel status</span>
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-6 space-y-4 shadow-3xs">
+            <div className="flex items-center gap-2 pb-3 border-b border-slate-100 text-slate-900">
+              <Scale size={18} className="text-purple-600" />
+              <h3 className="font-extrabold text-xs uppercase tracking-wider">Document Legal Governance</h3>
             </div>
-
-            <div className="space-y-3 text-xs font-medium font-mono">
-              <div>
-                <span className="text-[10px] text-slate-500 block mb-0.5">ENVIRONMENT NODE</span>
-                <p className="text-slate-100">CLOUD-DOCKER_RUN</p>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 block mb-0.5">FAST_API TUNNEL</span>
-                <p className="text-emerald-400 flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
-                  <span>ONLINE_200_OK</span>
-                </p>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-500 block mb-0.5">ACTIVE CACHE SCHEMA</span>
-                <p className="text-blue-400">Local JSON DB Store</p>
+            <div className="space-y-2 text-xs text-slate-600 leading-relaxed">
+              <p>
+                Document terms and policies are strictly managed under Role-Based Access Control (RBAC). Only <strong className="text-slate-900">Principal Administrators</strong> have privileges to alter contractual clauses.
+              </p>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 font-mono text-[11px] space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Active Governance Level:</span>
+                  <span className="font-bold text-slate-900">{isPrincipalUser ? "Executive Principal (Full Access)" : "Standard Operator (Read Only)"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Managed Document Types:</span>
+                  <span className="font-bold text-blue-600">6 Formats Configured</span>
+                </div>
               </div>
             </div>
           </div>

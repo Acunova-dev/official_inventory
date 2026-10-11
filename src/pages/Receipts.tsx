@@ -316,7 +316,7 @@ export const Receipts: React.FC = () => {
           <div className="flex items-center gap-3">
             <button 
               onClick={() => { setView("list"); }}
-              className="p-2 border border-slate-200 bg-white rounded-xl text-slate-500 hover:text-slate-905 transition-colors"
+              className="p-2 border border-slate-200 bg-white rounded-xl text-slate-500 hover:text-slate-900 hover:border-slate-300 transition-colors cursor-pointer"
               title="Return to transactions list"
             >
               <ArrowLeft size={16} />
@@ -375,7 +375,7 @@ export const Receipts: React.FC = () => {
 
                 <div className="space-y-3">
                   {fields.map((field, index) => (
-                    <div key={field.id} className="flex gap-4 items-center bg-slate-50/50 p-3 rounded-xl border border-slate-150 relative">
+                    <div key={field.id} className="flex gap-4 items-center bg-slate-50/50 p-3 rounded-xl border border-slate-200 relative">
                       <div className="flex-1">
                         <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Hardware Item Selection</label>
                         <select
@@ -526,7 +526,7 @@ export const Receipts: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setView("list")}
-                    className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-bold rounded-xl transition-all border border-slate-705"
+                    className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-bold rounded-xl transition-all border border-slate-700 cursor-pointer"
                   >
                     Discard Transaction
                   </button>
@@ -544,7 +544,7 @@ export const Receipts: React.FC = () => {
           <div className="flex items-center justify-between">
             <button
               onClick={() => { setView("list"); }}
-              className="px-3 py-1.5 border border-slate-200 bg-white rounded-lg text-slate-700 hover:text-slate-905 text-xs font-bold flex items-center gap-1.5 transition-colors"
+              className="px-3 py-1.5 border border-slate-200 bg-white rounded-lg text-slate-700 hover:text-slate-900 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <ArrowLeft size={14} />
               <span>Receipt Ledger</span>

@@ -348,6 +348,29 @@ export const invoiceService = {
   }): Promise<{ receipt: Receipt; invoice: Invoice }> => {
     const bId = await getActiveBusinessId();
     return fsInvoiceService.generateReceiptFromInvoice(bId, payload);
+  },
+  delete: async (id: string): Promise<void> => {
+    const bId = await getActiveBusinessId();
+    return fsInvoiceService.delete(bId, id);
+  },
+  reversePayment: async (id: string, notes?: string): Promise<Invoice> => {
+    const bId = await getActiveBusinessId();
+    return fsInvoiceService.reversePayment(bId, id, notes);
+  },
+  updateSourcingDetails: async (id: string, payload: {
+    sourcingNotes: string;
+    lineUpdates?: Array<{
+      productId: string;
+      sourcingSupplier?: string;
+      sourcingReference?: string;
+      sourcingDate?: string;
+      sourcingCost?: number;
+      sourcingNotes?: string;
+      adjustInventoryStock?: boolean;
+    }>;
+  }): Promise<Invoice> => {
+    const bId = await getActiveBusinessId();
+    return fsInvoiceService.updateSourcingDetails(bId, id, payload);
   }
 };
 

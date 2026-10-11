@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { settingsService, customerService, supplierService, productService } from "../services/api";
 import { getMergedCompanySettings } from "../constants/defaultSettings";
-import { QUOTATION_TERMS_AND_CONDITIONS } from "../constants/termsAndConditions";
+import { QUOTATION_TERMS_AND_CONDITIONS, parseTermsStringToClauses } from "../constants/termsAndConditions";
 import { 
   SupportedDocumentType, 
   normalizeDocument,
@@ -659,20 +659,23 @@ export const UnifiedDocumentModal: React.FC<UnifiedDocumentModalProps> = ({
                     <FileText size={14} className="text-blue-600" />
                     <h5 className="font-extrabold text-xs text-slate-900 uppercase tracking-wider">Terms & Conditions</h5>
                   </div>
-                  {typeof normDoc.terms_and_conditions === "string" ? (
-                    <div className="bg-slate-50/70 p-3 rounded-lg border border-slate-200/60 text-[10px] text-slate-600 leading-relaxed font-sans whitespace-pre-line">
-                      {normDoc.terms_and_conditions}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-slate-600 leading-relaxed font-sans">
-                      {(Array.isArray(normDoc.terms_and_conditions) ? normDoc.terms_and_conditions : QUOTATION_TERMS_AND_CONDITIONS).map((clause, idx) => (
-                        <div key={idx} className="space-y-0.5 bg-slate-50/70 p-2.5 rounded-lg border border-slate-200/60">
-                          <p className="font-bold text-slate-800 text-[10px]">{clause.title}</p>
-                          <p className="text-slate-600 text-[9.5px] leading-relaxed">{clause.content}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {(() => {
+                    const clauses = typeof normDoc.terms_and_conditions === "string"
+                      ? parseTermsStringToClauses(normDoc.terms_and_conditions)
+                      : (normDoc.docType === "quotation" && companySettings?.quotationTerms
+                          ? parseTermsStringToClauses(companySettings.quotationTerms)
+                          : (Array.isArray(normDoc.terms_and_conditions) ? normDoc.terms_and_conditions : QUOTATION_TERMS_AND_CONDITIONS));
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px] text-slate-600 leading-relaxed font-sans">
+                        {clauses.map((clause, idx) => (
+                          <div key={idx} className="space-y-0.5 bg-slate-50/70 p-2.5 rounded-lg border border-slate-200/60">
+                            <p className="font-bold text-slate-800 text-[10px]">{clause.title}</p>
+                            <p className="text-slate-600 text-[9.5px] leading-relaxed">{clause.content}</p>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 

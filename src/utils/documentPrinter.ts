@@ -601,6 +601,14 @@ export async function generatePdfBlob(
   // 10. Terms & Conditions (Flow-driven, variable-height, line-by-line page break protection)
   if (normDoc.include_terms_conditions || normDoc.terms_and_conditions) {
     engine.renderTermsAndConditionsBlock(normDoc.terms_and_conditions || normDoc.include_terms_conditions);
+  } else if (normDoc.docType === "invoice" && settings.invoiceTerms) {
+    engine.renderTermsAndConditionsBlock(settings.invoiceTerms);
+  } else if (normDoc.docType === "receipt" && settings.receiptTerms) {
+    engine.renderTermsAndConditionsBlock(settings.receiptTerms);
+  } else if (normDoc.docType === "po" && settings.purchaseOrderTerms) {
+    engine.renderTermsAndConditionsBlock(settings.purchaseOrderTerms);
+  } else if ((normDoc.docType === "grn" || (normDoc.docType as string) === "delivery_note") && settings.deliveryTerms) {
+    engine.renderTermsAndConditionsBlock(settings.deliveryTerms);
   }
 
   // 11. Authorization & Signatures Grid (Prepared By, Approved By, Received By)

@@ -134,7 +134,7 @@ export const Suppliers: React.FC = () => {
         <button
           onClick={handleOpenAddForm}
           id="btn-add-supplier"
-          className="flex items-center gap-2 px-4 py-2.5 bg-slate-905 text-white text-xs font-bold rounded-xl shadow-md uppercase tracking-wider transition-all self-start sm:self-center"
+          className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-md uppercase tracking-wider transition-all self-start sm:self-center cursor-pointer"
         >
           <Plus size={15} />
           <span>New Supplier</span>
@@ -163,7 +163,7 @@ export const Suppliers: React.FC = () => {
                   <div className="flex items-center gap-1 opacity-45 group-hover:opacity-100 transition-all">
                     <button
                       onClick={() => handleOpenEditForm(s)}
-                      className="p-1.5 rounded-lg text-slate-605 hover:bg-slate-100"
+                      className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
                       title="Edit Contractor"
                       id={`btn-edit-sup-${s.id}`}
                     >
@@ -180,19 +180,19 @@ export const Suppliers: React.FC = () => {
                   </div>
                 </div>
 
-                <h2 className="font-extrabold text-slate-900 group-hover:text-blue-605 transition-colors mt-4 text-base leading-snug">
+                <h2 className="font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors mt-4 text-base leading-snug">
                   {s.name}
                 </h2>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-slate-50 space-y-2 text-xs font-medium text-slate-500">
+              <div className="mt-5 pt-4 border-t border-slate-100 space-y-2 text-xs font-medium text-slate-500">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-slate-400 font-bold uppercase">Email:</span>
-                  <span className="font-mono text-slate-750">{s.email}</span>
+                  <span className="font-mono text-slate-700">{s.email}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-slate-400 font-bold uppercase">Phone:</span>
-                  <span className="font-mono text-slate-750">{s.phone}</span>
+                  <span className="font-mono text-slate-700">{s.phone}</span>
                 </div>
                 <div className="flex items-start justify-between gap-4 pt-1">
                   <span className="text-[10px] text-slate-400 font-bold uppercase shrink-0">Address:</span>
@@ -218,7 +218,7 @@ export const Suppliers: React.FC = () => {
               exit={{ scale: 0.95, opacity: 0 }}
               className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full overflow-hidden"
             >
-              <div className="px-6 py-4 border-b border-slate-150 bg-slate-50 flex items-center justify-between">
+              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                 <h3 className="font-black text-slate-900 tracking-tight text-lg">
                   {editingSupplier ? "Configure Partner Details" : "Register Distributor Partner"}
                 </h3>
@@ -285,7 +285,7 @@ export const Suppliers: React.FC = () => {
                     type="submit"
                     id="btn-supplier-submit"
                     disabled={isSubmitting}
-                    className="px-4 py-2 bg-slate-905 text-white text-xs font-bold rounded-xl shadow-md uppercase tracking-wider transition-all"
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-md uppercase tracking-wider transition-all cursor-pointer"
                   >
                     {isSubmitting ? "Processing..." : editingSupplier ? "Save details" : "Register Supplier"}
                   </button>
@@ -317,7 +317,7 @@ export const Suppliers: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setDeleteId(null)}
-                  className="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-705 text-sm font-bold rounded-lg transition-colors"
+                  className="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold rounded-lg transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>

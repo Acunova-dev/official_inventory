@@ -1,7 +1,7 @@
 import jsPDF from "jspdf";
 import { CompanySettings } from "../types";
 import { NormalizedPrintDocument } from "./documentPrinter";
-import { QUOTATION_TERMS_AND_CONDITIONS, TermClause } from "../constants/termsAndConditions";
+import { QUOTATION_TERMS_AND_CONDITIONS, TermClause, parseTermsStringToClauses } from "../constants/termsAndConditions";
 
 export interface FlowEngineOptions {
   paperSize?: "a4" | "a5" | "letter" | "thermal";
@@ -691,14 +691,13 @@ export class PdfFlowEngine {
     if (Array.isArray(terms)) {
       clauses = terms;
     } else if (typeof terms === "string" && terms.trim() !== "") {
-      clauses = [
-        {
-          title: "Terms & Conditions",
-          content: terms.trim(),
-        },
-      ];
+      clauses = parseTermsStringToClauses(terms);
     } else if (terms === true) {
-      clauses = QUOTATION_TERMS_AND_CONDITIONS;
+      if (this.settings.quotationTerms && this.settings.quotationTerms.trim() !== "") {
+        clauses = parseTermsStringToClauses(this.settings.quotationTerms);
+      } else {
+        clauses = QUOTATION_TERMS_AND_CONDITIONS;
+      }
     }
 
     if (clauses.length === 0) return;
@@ -950,7 +949,10 @@ export class PdfFlowEngine {
       y += 3.8;
       this.doc.setFont("helvetica", "normal");
       this.doc.setFontSize(6.5);
-      QUOTATION_TERMS_AND_CONDITIONS.forEach((clause) => {
+      const thermalClauses = this.settings.quotationTerms
+        ? parseTermsStringToClauses(this.settings.quotationTerms)
+        : QUOTATION_TERMS_AND_CONDITIONS;
+      thermalClauses.forEach((clause) => {
         this.doc.text(`• ${clause.title}: ${clause.content}`, this.leftMargin, y, {
           maxWidth: this.contentWidth,
         });

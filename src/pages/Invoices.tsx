@@ -10,9 +10,10 @@ import {
   customerService, 
   productService, 
   settingsService, 
-  financialService 
+  financialService,
+  supplierService
 } from "../services/api";
-import { Invoice, Quotation, Customer, Product, BankAccount } from "../types";
+import { Invoice, Quotation, Customer, Product, BankAccount, Supplier } from "../types";
 import { useToast } from "../components/Layout";
 import { 
   FileCheck, 
@@ -39,7 +40,10 @@ import {
   FileText,
   RefreshCw,
   UserCheck,
-  Send
+  Send,
+  Package,
+  Layers,
+  AlertTriangle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { UnifiedDocumentModal } from "../components/UnifiedDocumentModal";
@@ -90,6 +94,26 @@ export const Invoices: React.FC = () => {
   const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>("");
   const [paymentNotes, setPaymentNotes] = useState<string>("");
 
+  // Delete Invoice state
+  const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
+
+  // Reverse Payment state
+  const [invoiceToReversePayment, setInvoiceToReversePayment] = useState<Invoice | null>(null);
+  const [reversalNotes, setReversalNotes] = useState("");
+
+  // Sourcing Details state
+  const [sourcingInvoice, setSourcingInvoice] = useState<Invoice | null>(null);
+  const [isSourcingModalOpen, setIsSourcingModalOpen] = useState(false);
+  const [sourcingGeneralNotes, setSourcingGeneralNotes] = useState("");
+  const [sourcingLineFormState, setSourcingLineFormState] = useState<Record<string, {
+    sourcingSupplier: string;
+    sourcingReference: string;
+    sourcingDate: string;
+    sourcingCost: number;
+    sourcingNotes: string;
+    adjustInventoryStock: boolean;
+  }>>({});
+
   // Document PDF Preview Modal
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<{ type: "invoice"; data: Invoice } | null>(null);
@@ -108,6 +132,11 @@ export const Invoices: React.FC = () => {
   const { data: customers = [] } = useQuery({
     queryKey: ["customers"],
     queryFn: () => customerService.getAll(),
+  });
+
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: () => supplierService.getAll(),
   });
 
   const { data: products = [] } = useQuery({
@@ -179,9 +208,10 @@ export const Invoices: React.FC = () => {
     },
     onSuccess: (newInv) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
-      showToast(`Invoice #${newInv.invoiceNumber} successfully generated.`, "success");
+      showToast(`Invoice #${newInv.invoiceNumber} successfully generated. Product stock automatically deducted.`, "success");
       reset();
       setView("list");
     },
@@ -195,9 +225,10 @@ export const Invoices: React.FC = () => {
     mutationFn: (quotationId: string) => quotationService.convertToInvoice(quotationId),
     onSuccess: (newInv) => {
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["quotations"] });
       queryClient.invalidateQueries({ queryKey: ["systemLogs"] });
-      showToast(`Quotation converted to Invoice #${newInv.invoiceNumber}!`, "success");
+      showToast(`Quotation converted to Invoice #${newInv.invoiceNumber}! Stock automatically deducted.`, "success");
       setIsConvertQuotationModalOpen(false);
       setSelectedQuoteToConvert(null);
       setSelectedInvoiceId(newInv.id);
@@ -229,6 +260,78 @@ export const Invoices: React.FC = () => {
       showToast(err.message || "Failed to record payment.", "error");
     },
   });
+
+  // Delete Invoice mutation (automatically restores deducted stock)
+  const deleteInvoiceMutation = useMutation({
+    mutationFn: (id: string) => invoiceService.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["quotations"] });
+      queryClient.invalidateQueries({ queryKey: ["systemLogs"] });
+      showToast(`Invoice #${invoiceToDelete?.invoiceNumber} deleted and stock quantities restored to inventory!`, "success");
+      setInvoiceToDelete(null);
+      if (view === "view") {
+        setView("list");
+      }
+    },
+    onError: (err: any) => {
+      showToast(err.message || "Failed to delete invoice.", "error");
+    }
+  });
+
+  // Reverse Payment mutation (e.g. if user made a mistake and clicked Paid)
+  const reversePaymentMutation = useMutation({
+    mutationFn: ({ id, notes }: { id: string; notes?: string }) => invoiceService.reversePayment(id, notes),
+    onSuccess: (updatedInv) => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["receipts"] });
+      queryClient.invalidateQueries({ queryKey: ["cashBook"] });
+      queryClient.invalidateQueries({ queryKey: ["bankAccounts"] });
+      queryClient.invalidateQueries({ queryKey: ["financialSummary"] });
+      queryClient.invalidateQueries({ queryKey: ["systemLogs"] });
+      showToast(`Payment on Invoice #${updatedInv.invoiceNumber} reversed! Status reset to Issued with full outstanding balance ($${(updatedInv.total || 0).toFixed(2)}).`, "success");
+      setInvoiceToReversePayment(null);
+      setReversalNotes("");
+    },
+    onError: (err: any) => {
+      showToast(err.message || "Failed to reverse invoice payment.", "error");
+    }
+  });
+
+  // Update Sourcing Details mutation
+  const updateSourcingMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: any }) => invoiceService.updateSourcingDetails(id, payload),
+    onSuccess: (updatedInv) => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["systemLogs"] });
+      showToast(`Sourcing & item origin details saved for Invoice #${updatedInv.invoiceNumber}!`, "success");
+      setIsSourcingModalOpen(false);
+      setSourcingInvoice(null);
+    },
+    onError: (err: any) => {
+      showToast(err.message || "Failed to save sourcing details.", "error");
+    }
+  });
+
+  const handleOpenSourcingModal = (inv: Invoice) => {
+    setSourcingInvoice(inv);
+    setSourcingGeneralNotes(inv.sourcingNotes || "");
+    const initialLineState: Record<string, any> = {};
+    inv.lines.forEach((l) => {
+      initialLineState[l.productId] = {
+        sourcingSupplier: l.sourcingSupplier || "",
+        sourcingReference: l.sourcingReference || "",
+        sourcingDate: l.sourcingDate || new Date().toISOString().split("T")[0],
+        sourcingCost: l.sourcingCost !== undefined ? l.sourcingCost : l.unitPrice,
+        sourcingNotes: l.sourcingNotes || "",
+        adjustInventoryStock: Boolean(l.isOverOrdered && (l.deficitQty || 0) > 0),
+      };
+    });
+    setSourcingLineFormState(initialLineState);
+    setIsSourcingModalOpen(true);
+  };
 
   // Calculate live totals for form
   const subtotal = watchedItems.reduce((acc, item) => {

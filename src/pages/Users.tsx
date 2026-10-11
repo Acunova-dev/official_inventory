@@ -270,7 +270,7 @@ export const UsersManagement: React.FC = () => {
               exit={{ scale: 0.95, opacity: 0 }}
               className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden"
             >
-              <div className="px-6 py-4 border-b border-slate-150 bg-slate-50 flex items-center justify-between">
+              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                 <h3 className="font-black text-slate-900 tracking-tight text-lg">
                   {editingUser ? "Modify Credential Properties" : "Provision Staff Account"}
                 </h3>

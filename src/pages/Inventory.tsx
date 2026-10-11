@@ -129,7 +129,7 @@ export const Inventory: React.FC = () => {
             <div key={p.id} className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-3xs hover:shadow-xs transition-shadow flex flex-col justify-between group">
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-[10px] font-bold text-slate-450 uppercase font-mono bg-slate-100 p-1 rounded-sm max-w-[120px] truncate">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase font-mono bg-slate-100 p-1 rounded-sm max-w-[120px] truncate">
                     {p.category}
                   </span>
                   
@@ -179,7 +179,7 @@ export const Inventory: React.FC = () => {
           ))}
         </div>
       ) : (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3 bg-white rounded-2xl border border-slate-205">
+        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3 bg-white rounded-2xl border border-slate-200">
           <Activity size={40} className="stroke-1 text-slate-300" />
           <p className="text-sm font-semibold">No stock records linked to this company node</p>
         </div>

@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { quotationService, customerService, productService, settingsService, aiCopilotService } from "../services/api";
 import { getMergedCompanySettings } from "../constants/defaultSettings";
-import { QUOTATION_TERMS_AND_CONDITIONS } from "../constants/termsAndConditions";
+import { QUOTATION_TERMS_AND_CONDITIONS, parseTermsStringToClauses } from "../constants/termsAndConditions";
 import logoImg from "../pic.png";
 import { Quotation, Customer, Product } from "../types";
 import { useToast } from "../components/Layout";
@@ -21,7 +21,6 @@ import {
   ChevronRight,
   Sparkles,
   Download,
-  Printer,
   X,
   CreditCard,
   Building,
@@ -36,9 +35,7 @@ import {
   Square
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { UnifiedDocumentModal } from "../components/UnifiedDocumentModal";
 import { DocumentOcrModal } from "../components/DocumentOcrModal";
-import { PrintConfirmationModal } from "../components/PrintConfirmationModal";
 import { normalizeDocument, enrichDocumentData, exportDocumentToPdf } from "../utils/documentPrinter";
 import { ProductAutocompleteSelect } from "../components/ProductAutocompleteSelect";
 
@@ -52,8 +49,16 @@ const quotationFormSchema = z.object({
   includeImportCosts: z.boolean().default(false),
   totalImportCosts: z.coerce.number().min(0).default(0),
   allowZiGPayments: z.boolean().default(false),
-  interbankRate: z.coerce.number().min(0).optional(),
-  streetRate: z.coerce.number().min(0).optional(),
+  interbankRate: z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return undefined;
+    const n = Number(val);
+    return isNaN(n) ? undefined : n;
+  }, z.number().min(0).optional()),
+  streetRate: z.preprocess((val) => {
+    if (val === "" || val === null || val === undefined) return undefined;
+    const n = Number(val);
+    return isNaN(n) ? undefined : n;
+  }, z.number().min(0).optional()),
   notes: z.string().optional(),
   status: z.enum(["Draft", "Sent", "Accepted", "Rejected", "Expired"]).default("Draft"),
   items: z.array(
@@ -63,12 +68,18 @@ const quotationFormSchema = z.object({
     })
   ).min(1, { message: "You must add at least one electronics item to the quotation." }),
 }).refine(data => {
+  // If ZiG payments is not checked, it has NO blocking power over quotation generation
+  if (!data.allowZiGPayments) {
+    return true;
+  }
+  // When ZiG is checked, validate that provided rates are positive numbers
   if (data.allowZiGPayments) {
-    return (data.interbankRate !== undefined && data.interbankRate > 0) && (data.streetRate !== undefined && data.streetRate > 0);
+    if (data.interbankRate !== undefined && data.interbankRate <= 0) return false;
+    if (data.streetRate !== undefined && data.streetRate <= 0) return false;
   }
   return true;
 }, {
-  message: "Interbank Rate and Street Rate are required when ZiG payments are enabled.",
+  message: "When ZiG payments are enabled, exchange rates must be positive numbers.",
   path: ["interbankRate"]
 });
 
@@ -101,14 +112,6 @@ export const Quotations: React.FC = () => {
   const [isGeneratingAiCover, setIsGeneratingAiCover] = useState(false);
   const [aiCoverLetter, setAiCoverLetter] = useState<string | null>(null);
 
-  // PDF Preview Modal State
-  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
-  const [pdfPreviewData, setPdfPreviewData] = useState<{ type: "quotation" | "receipt"; data: Quotation; aiCoverNote?: string | null } | null>(null);
-
-  // Direct Print Verification Modal State
-  const [isDirectPrintConfirmOpen, setIsDirectPrintConfirmOpen] = useState(false);
-  const [directPrintData, setDirectPrintData] = useState<{ type: "quotation"; data: Quotation } | null>(null);
-
   const getEnrichedQuote = (quote: Quotation): Quotation => {
     const cust = customers.find(c => c.id === quote.customerId || c.name === quote.customerName);
     return {
@@ -118,22 +121,6 @@ export const Quotations: React.FC = () => {
       customerPhone: quote.customerPhone || cust?.phone || "",
       customerAddress: quote.customerAddress || cust?.address || "",
     };
-  };
-
-  const openPdfPreviewModal = (quote: Quotation) => {
-    const enriched = getEnrichedQuote(quote);
-    setPdfPreviewData({
-      type: "quotation",
-      data: enriched,
-      aiCoverNote: quote.id === selectedQuoteId ? aiCoverLetter : null,
-    });
-    setIsPreviewModalOpen(true);
-  };
-
-  const handleOpenDirectPrint = (quote: Quotation) => {
-    const enriched = getEnrichedQuote(quote);
-    setDirectPrintData({ type: "quotation", data: enriched });
-    setIsDirectPrintConfirmOpen(true);
   };
 
   // Queries
@@ -336,8 +323,8 @@ export const Quotations: React.FC = () => {
     setValue("includeImportCosts", false);
     setValue("totalImportCosts", 0);
     setValue("allowZiGPayments", false);
-    setValue("interbankRate", "");
-    setValue("streetRate", "");
+    setValue("interbankRate", undefined);
+    setValue("streetRate", undefined);
     setValue("notes", "");
     setValue("status", "Draft");
     setValue("items", [{ productId: "", quantity: 1 }]);
@@ -369,8 +356,8 @@ export const Quotations: React.FC = () => {
 
     const allowZiG = Boolean(quote.allowZiGPayments ?? quote.allow_zig_payments);
     setValue("allowZiGPayments", allowZiG);
-    setValue("interbankRate", quote.interbankRate ?? quote.interbank_rate ?? "");
-    setValue("streetRate", quote.streetRate ?? quote.street_rate ?? "");
+    setValue("interbankRate", allowZiG ? (quote.interbankRate ?? quote.interbank_rate ?? undefined) : undefined);
+    setValue("streetRate", allowZiG ? (quote.streetRate ?? quote.street_rate ?? undefined) : undefined);
 
     setValue("notes", quote.notes || "");
     setValue("status", quote.status || "Draft");
@@ -430,95 +417,10 @@ export const Quotations: React.FC = () => {
     }
   }, [location.state, products, quotations]);
 
-  const formItems = watch("items");
-  const formDiscountRate = watch("discountRate") || 0;
-  const formCustomerId = watch("customerId");
-  const formEnableTax = watch("enableTax");
-  const formTaxRateInput = watch("taxRate") || 0;
-  const effectiveFormTaxRate = formEnableTax ? (formTaxRateInput > 1 ? formTaxRateInput / 100 : formTaxRateInput) : 0;
-  const formIncludeTerms = watch("includeTermsConditions");
   const formIncludeImportCosts = watch("includeImportCosts");
-  const formTotalImportCosts = watch("totalImportCosts") || 0;
   const formAllowZiGPayments = watch("allowZiGPayments");
   const formInterbankRate = watch("interbankRate");
   const formStreetRate = watch("streetRate");
-
-  // Live Calculations Preview Query (computed on express backend asynchronously!)
-  const { data: calculationPreview } = useQuery({
-    queryKey: [
-      "quote-preview", 
-      formItems, 
-      formDiscountRate, 
-      effectiveFormTaxRate, 
-      formIncludeTerms, 
-      formIncludeImportCosts, 
-      formTotalImportCosts,
-      formAllowZiGPayments,
-      formInterbankRate,
-      formStreetRate
-    ],
-    queryFn: () => quotationService.calculate({
-      items: formItems,
-      discountRate: formDiscountRate,
-      taxRate: effectiveFormTaxRate,
-      includeTermsConditions: formIncludeTerms,
-      include_terms_conditions: formIncludeTerms,
-      includeImportCosts: formIncludeImportCosts,
-      include_import_costs: formIncludeImportCosts,
-      totalImportCosts: formIncludeImportCosts ? Number(formTotalImportCosts) : 0,
-      total_import_costs: formIncludeImportCosts ? Number(formTotalImportCosts) : 0,
-      allowZiGPayments: formAllowZiGPayments,
-      allow_zig_payments: formAllowZiGPayments,
-      interbankRate: formAllowZiGPayments && formInterbankRate ? Number(formInterbankRate) : undefined,
-      interbank_rate: formAllowZiGPayments && formInterbankRate ? Number(formInterbankRate) : undefined,
-      streetRate: formAllowZiGPayments && formStreetRate ? Number(formStreetRate) : undefined,
-      street_rate: formAllowZiGPayments && formStreetRate ? Number(formStreetRate) : undefined,
-    }),
-    enabled: formItems.length > 0 && formItems.every(i => i.productId && i.quantity > 0),
-  });
-
-  const handleOpenDraftPrint = () => {
-    if (!calculationPreview) {
-      showToast("Please select line items and valid quantities to initiate pricing calculators.", "info");
-      return;
-    }
-    const cust = customers.find(c => c.id === formCustomerId);
-    const draftQuote: Quotation = {
-      id: editingQuote ? editingQuote.id : "DRAFT-TEMP",
-      quotationNumber: editingQuote ? editingQuote.quotationNumber : `QT-DRAFT-${Date.now().toString().slice(-4)}`,
-      customerId: formCustomerId || "CUST-DRAFT",
-      customerName: cust?.name || editingQuote?.customerName || "Draft Trade Partner",
-      customerEmail: cust?.email || editingQuote?.customerEmail || "billing@client.com",
-      customerPhone: cust?.phone || editingQuote?.customerPhone || "",
-      customerAddress: cust?.address || editingQuote?.customerAddress || "",
-      date: editingQuote ? editingQuote.date : new Date().toISOString().split("T")[0],
-      expiryDate: editingQuote ? editingQuote.expiryDate : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      status: watch("status") || (editingQuote ? editingQuote.status : "Draft"),
-      lines: calculationPreview.lines || [],
-      subtotal: calculationPreview.subtotal || 0,
-      taxRate: effectiveFormTaxRate,
-      discountRate: formDiscountRate,
-      discountAmount: calculationPreview.discountAmount || 0,
-      taxAmount: calculationPreview.taxAmount || 0,
-      include_terms_conditions: formIncludeTerms,
-      includeTermsConditions: formIncludeTerms,
-      include_import_costs: formIncludeImportCosts,
-      includeImportCosts: formIncludeImportCosts,
-      total_import_costs: formIncludeImportCosts ? Number(formTotalImportCosts) : 0,
-      totalImportCosts: formIncludeImportCosts ? Number(formTotalImportCosts) : 0,
-      allowZiGPayments: formAllowZiGPayments,
-      allow_zig_payments: formAllowZiGPayments,
-      interbankRate: formAllowZiGPayments && formInterbankRate ? Number(formInterbankRate) : undefined,
-      interbank_rate: formAllowZiGPayments && formInterbankRate ? Number(formInterbankRate) : undefined,
-      streetRate: formAllowZiGPayments && formStreetRate ? Number(formStreetRate) : undefined,
-      street_rate: formAllowZiGPayments && formStreetRate ? Number(formStreetRate) : undefined,
-      calculatedMultiplier: calculationPreview.calculatedMultiplier,
-      calculated_multiplier: calculationPreview.calculatedMultiplier,
-      total: calculationPreview.total || 0,
-      notes: watch("notes") || (editingQuote ? editingQuote.notes : "Draft quotation specification")
-    };
-    handleOpenDirectPrint(draftQuote);
-  };
 
   const selectedQuote = quotations.find(q => q.id === selectedQuoteId);
 
@@ -541,11 +443,25 @@ export const Quotations: React.FC = () => {
   };
 
   const submitQuotation = (values: QuotationFormValues) => {
+    const isZiG = Boolean(values.allowZiGPayments);
+    const cleanedValues: QuotationFormValues = {
+      ...values,
+      allowZiGPayments: isZiG,
+      interbankRate: isZiG && values.interbankRate && !isNaN(Number(values.interbankRate)) ? Number(values.interbankRate) : undefined,
+      streetRate: isZiG && values.streetRate && !isNaN(Number(values.streetRate)) ? Number(values.streetRate) : undefined,
+    };
     if (view === "edit" && editingQuote) {
-      updateMutation.mutate({ id: editingQuote.id, data: values });
+      updateMutation.mutate({ id: editingQuote.id, data: cleanedValues });
     } else {
-      createMutation.mutate(values);
+      createMutation.mutate(cleanedValues);
     }
+  };
+
+  const onInvalidForm = (fieldErrors: any) => {
+    console.warn("Quotation validation errors:", fieldErrors);
+    const firstKey = Object.keys(fieldErrors)[0];
+    const errMsg = fieldErrors[firstKey]?.message || "Please complete all required quotation fields.";
+    showToast(errMsg, "error");
   };
 
   // PDF document generator & downloader
@@ -563,10 +479,6 @@ export const Quotations: React.FC = () => {
       console.error("Failed to generate quote PDF:", err);
       showToast("Failed to generate PDF quote.", "error");
     }
-  };
-
-  const printDocument = () => {
-    window.print();
   };
 
   return (
@@ -649,7 +561,7 @@ export const Quotations: React.FC = () => {
                               {q.status}
                             </span>
                             {(q.allowZiGPayments || q.allow_zig_payments) ? (
-                              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-150">
+                              <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
                                 USD & ZiG
                               </span>
                             ) : (
@@ -680,15 +592,6 @@ export const Quotations: React.FC = () => {
                             >
                               <Eye size={13} />
                               <span>Details</span>
-                            </button>
-                            <button
-                              onClick={() => openPdfPreviewModal(q)}
-                              className="p-1.5 rounded-lg text-blue-600 bg-blue-50/80 hover:bg-blue-600 hover:text-white transition-all font-bold text-xs inline-flex items-center gap-1.5 border border-blue-200/80 shadow-3xs cursor-pointer"
-                              id={`btn-pdf-preview-${q.id}`}
-                              title="Preview Generated PDF & Print"
-                            >
-                              <Printer size={13} />
-                              <span>PDF & Print</span>
                             </button>
                             <button
                               onClick={() => convertToInvoiceMutation.mutate(q.id)}
@@ -751,29 +654,44 @@ export const Quotations: React.FC = () => {
                 <p className="text-xs text-slate-400 mt-0.5 font-mono">
                   {view === "edit" 
                     ? "Update hardware line items, customer details, discount terms, or taxes" 
-                    : "Stepped configuration — All total pricing computed by custom backend"}
+                    : "Stepped configuration — hardware items, discounts, taxes, and customer terms"}
                 </p>
               </div>
             </div>
 
-            {view === "edit" && (
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
                   setEditingQuote(null);
-                  setView("list");
+                  if (selectedQuoteId) {
+                    setView("view");
+                  } else {
+                    setView("list");
+                  }
                 }}
-                className="text-xs font-semibold text-slate-500 hover:text-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-all cursor-pointer"
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-all cursor-pointer"
               >
-                Cancel Editing
+                Cancel {view === "edit" ? "Editing" : "Draft"}
               </button>
-            )}
+              <button
+                type="submit"
+                form="quotation-form"
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className="text-xs font-bold text-white px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-40 transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+              >
+                {updateMutation.isPending 
+                  ? "Saving Changes..." 
+                  : createMutation.isPending 
+                  ? "Saving Quote..." 
+                  : view === "edit" 
+                  ? "Save Changes to Quotation" 
+                  : "Submit & Save Quote"}
+              </button>
+            </div>
           </div>
 
-          <form onSubmit={handleSubmit(submitQuotation)} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* Step form input space */}
-            <div className="lg:col-span-2 space-y-6">
+          <form id="quotation-form" onSubmit={handleSubmit(submitQuotation, onInvalidForm)} className="space-y-6 max-w-5xl">
               
               {/* Step 1: Select Customer */}
               <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-xs space-y-4">
@@ -953,7 +871,7 @@ export const Quotations: React.FC = () => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label htmlFor="interbank-rate" className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
-                              Interbank Rate <span className="text-rose-500">*</span>
+                              Interbank Rate
                             </label>
                             <input
                               type="number"
@@ -961,7 +879,7 @@ export const Quotations: React.FC = () => {
                               step="0.01"
                               min="0.01"
                               placeholder="e.g. 26.5"
-                              {...register("interbankRate", { valueAsNumber: true, required: formAllowZiGPayments })}
+                              {...register("interbankRate")}
                               className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                             {errors.interbankRate && (
@@ -971,7 +889,7 @@ export const Quotations: React.FC = () => {
 
                           <div>
                             <label htmlFor="street-rate" className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
-                              Street Rate <span className="text-rose-500">*</span>
+                              Street Rate
                             </label>
                             <input
                               type="number"
@@ -979,7 +897,7 @@ export const Quotations: React.FC = () => {
                               step="0.01"
                               min="0.01"
                               placeholder="e.g. 42.0"
-                              {...register("streetRate", { valueAsNumber: true, required: formAllowZiGPayments })}
+                              {...register("streetRate")}
                               className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                             {errors.streetRate && (
@@ -1075,123 +993,38 @@ export const Quotations: React.FC = () => {
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Live Pricing Summary Block - Server authoritative */}
-            <div className="space-y-6">
-              <div className="bg-slate-900 text-white rounded-2xl p-6 border border-slate-800 space-y-6 sticky top-24 shadow-xl">
-                <div className="pb-3 border-b border-slate-800">
-                  <h3 className="font-extrabold text-sm uppercase tracking-widest text-slate-300">AUTHORITATIVE PRICING</h3>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Calculations computed on Server Node API</p>
-                </div>
-
-                {calculationPreview ? (
-                  <div className="space-y-4">
-                    <div className="space-y-2 border-b border-slate-800 pb-4 text-xs font-medium font-mono text-slate-300">
-                      {calculationPreview.lines.map((l: any, idx: number) => (
-                        <div key={idx} className="flex justify-between gap-4">
-                          <span className="truncate max-w-[150px]">{l.productName}</span>
-                          <span className="text-slate-500">x{l.quantity}</span>
-                          <span className="text-slate-100">${l.totalPrice.toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="space-y-2 text-xs font-medium font-mono">
-                      <div className="flex justify-between text-slate-400">
-                        <span>Cart Subtotal</span>
-                        <span>${calculationPreview.subtotal.toFixed(2)}</span>
-                      </div>
-                      {calculationPreview.discountAmount > 0 && (
-                        <div className="flex justify-between text-slate-400">
-                          <span>Discount ({formDiscountRate * 100}%)</span>
-                          <span className="text-rose-400">-${calculationPreview.discountAmount.toFixed(2)}</span>
-                        </div>
-                      )}
-                      {calculationPreview.taxAmount > 0 && (
-                        <div className="flex justify-between text-slate-400">
-                          <span>VAT / Sales Tax</span>
-                          <span>+${calculationPreview.taxAmount.toFixed(2)}</span>
-                        </div>
-                      )}
-                      {formIncludeImportCosts && (Number(formTotalImportCosts || 0) > 0 || (calculationPreview.total_import_costs || 0) > 0) && (
-                        <div className="flex justify-between text-indigo-300 border-t border-slate-800/60 pt-1">
-                          <span>Total Import Costs</span>
-                          <span className="font-bold">+${Number(formTotalImportCosts || calculationPreview.total_import_costs || 0).toFixed(2)}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-800 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400 font-sans">Grand Total</span>
-                        <span className="text-2xl font-black font-mono text-blue-400">${calculationPreview.total.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800/80">
-                        <span>Payment Mode:</span>
-                        <span className={`font-bold ${formAllowZiGPayments ? "text-indigo-400" : "text-slate-400"}`}>
-                          {formAllowZiGPayments 
-                            ? `USD & ZiG (${calculationPreview.calculatedMultiplier || (Number(formStreetRate) > 0 && Number(formInterbankRate) > 0 ? (Math.ceil((Number(formStreetRate) / Number(formInterbankRate)) * 10) / 10).toFixed(1) : "1.0")}x)` 
-                            : "USD Only"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 pt-1 border-t border-slate-800/80">
-                        <span>Terms & Conditions:</span>
-                        <span className={`font-bold ${formIncludeTerms ? "text-emerald-400" : "text-slate-500"}`}>
-                          {formIncludeTerms ? "Included" : "Omitted"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="py-8 flex flex-col items-center justify-center text-center gap-2 text-slate-500">
-                    <AlertCircle size={32} />
-                    <p className="text-xs">Add products and valid quantities to initiate pricing calculators.</p>
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-2 pt-2">
-                  <button
-                    type="submit"
-                    id="btn-quote-submit"
-                    disabled={createMutation.isPending || updateMutation.isPending || !calculationPreview}
-                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-sm font-bold text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    {updateMutation.isPending 
-                      ? "Saving Changes..." 
-                      : createMutation.isPending 
-                      ? "Compiling on Server..." 
-                      : view === "edit" 
-                      ? "Save Changes to Quotation" 
-                      : "Submit & Save Quote"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleOpenDraftPrint}
-                    disabled={!calculationPreview}
-                    id="btn-verify-print-builder"
-                    className="w-full py-2 bg-slate-800 hover:bg-slate-700/90 disabled:opacity-40 text-xs text-slate-200 font-bold rounded-xl transition-all border border-slate-700/80 flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <Printer size={13} />
-                    <span>Verify & Print {view === "edit" ? "Quotation" : "Draft"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingQuote(null);
-                      if (selectedQuoteId) {
-                        setView("view");
-                      } else {
-                        setView("list");
-                      }
-                    }}
-                    className="w-full py-2 bg-slate-800/60 hover:bg-slate-700/60 text-xs text-slate-400 font-bold rounded-xl transition-all border border-slate-800 cursor-pointer"
-                  >
-                    Cancel {view === "edit" ? "Editing" : "Draft"}
-                  </button>
-                </div>
+              {/* Form Action Controls */}
+              <div className="bg-white p-6 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingQuote(null);
+                    if (selectedQuoteId) {
+                      setView("view");
+                    } else {
+                      setView("list");
+                    }
+                  }}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all border border-slate-200 cursor-pointer"
+                >
+                  Cancel {view === "edit" ? "Editing" : "Draft"}
+                </button>
+                <button
+                  type="submit"
+                  id="btn-quote-submit"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-xs font-bold text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {updateMutation.isPending 
+                    ? "Saving Changes..." 
+                    : createMutation.isPending 
+                    ? "Saving Quote..." 
+                    : view === "edit" 
+                    ? "Save Changes to Quotation" 
+                    : "Submit & Save Quote"}
+                </button>
               </div>
-            </div>
 
           </form>
         </div>
@@ -1222,28 +1055,13 @@ export const Quotations: React.FC = () => {
                 </button>
               )}
               <button
-                onClick={() => handleOpenDirectPrint(selectedQuote)}
-                id="btn-direct-verify-print"
-                className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-                title="Verify proposal details before printing"
-              >
-                <Printer size={14} />
-                <span>Verify & Print</span>
-              </button>
-              <button
                 onClick={() => downloadSimulatedPdf(selectedQuote)}
-                className="px-3 py-1.5 border border-slate-200 bg-white rounded-lg text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all hover:bg-slate-50 cursor-pointer"
+                id="btn-download-quote-pdf"
+                className="px-3.5 py-1.5 border border-slate-200 bg-white hover:bg-slate-50 rounded-lg text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                title="Download Quotation PDF"
               >
                 <Download size={14} />
-                <span>PDF Invoice</span>
-              </button>
-              <button
-                onClick={() => openPdfPreviewModal(selectedQuote)}
-                id="btn-preview-and-print-quote"
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-              >
-                <Printer size={14} />
-                <span>Preview PDF & Print</span>
+                <span>Download Quote</span>
               </button>
             </div>
           </div>
@@ -1322,7 +1140,7 @@ export const Quotations: React.FC = () => {
               </div>
 
               {/* Calculation Summary Footer & Banking Settlement Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 pt-2 border-t border-slate-150 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 pt-2 border-t border-slate-200 gap-6">
                 <div className="text-xs text-slate-500 leading-relaxed font-sans space-y-3">
                   <div>
                     <p className="font-semibold text-slate-700 uppercase tracking-widest text-[9px] mb-1">Banking Details</p>
@@ -1405,7 +1223,7 @@ export const Quotations: React.FC = () => {
                     <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wider font-mono">Quotation Terms & Conditions</h4>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] text-slate-600 font-sans leading-relaxed">
-                    {QUOTATION_TERMS_AND_CONDITIONS.map((clause, idx) => (
+                    {parseTermsStringToClauses(mergedSettings.quotationTerms).map((clause, idx) => (
                       <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 space-y-1">
                         <p className="font-bold text-slate-800 text-xs">{clause.title}</p>
                         <p className="text-slate-600 text-[10.5px] leading-relaxed">{clause.content}</p>
@@ -1470,7 +1288,7 @@ export const Quotations: React.FC = () => {
               </div>
 
               {/* Gemini AI Cover Letter Generator */}
-              <div className="bg-gradient-to-br from-slate-905 to-slate-950 text-white rounded-2xl p-5 border border-slate-800 space-y-4 shadow-xl">
+              <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-2xl p-5 border border-slate-800 space-y-4 shadow-xl">
                 <div className="flex gap-2 items-center text-blue-400">
                   <Sparkles size={16} />
                   <span className="font-black text-xs uppercase tracking-widest text-slate-200">Acu-invent Assistant</span>
@@ -1517,25 +1335,10 @@ export const Quotations: React.FC = () => {
         </div>
       )}
 
-      {/* 4. UNIFIED BRANDED PDF PREVIEW MODAL */}
-      <UnifiedDocumentModal
-        isOpen={isPreviewModalOpen}
-        onClose={() => setIsPreviewModalOpen(false)}
-        document={pdfPreviewData ? { type: "quotation", data: pdfPreviewData.data } : null}
-      />
-
-      {/* 5. DOCUMENT OCR MODAL */}
+      {/* 4. DOCUMENT OCR MODAL */}
       <DocumentOcrModal
         isOpen={isOcrModalOpen}
         onClose={() => setIsOcrModalOpen(false)}
-      />
-
-      {/* 6. DIRECT PRINT CONFIRMATION MODAL */}
-      <PrintConfirmationModal
-        isOpen={isDirectPrintConfirmOpen}
-        onClose={() => setIsDirectPrintConfirmOpen(false)}
-        onConfirmPrint={() => setTimeout(() => window.print(), 150)}
-        documentData={directPrintData}
       />
 
     </div>

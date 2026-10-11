@@ -369,6 +369,12 @@ export interface CompanySettings {
   pdfHeaderColor: string;
   footerTerms: string;
   quotationStyle?: "minimalist_authentic" | "corporate_modern";
+  quotationTerms?: string;
+  invoiceTerms?: string;
+  receiptTerms?: string;
+  purchaseOrderTerms?: string;
+  deliveryTerms?: string;
+  generalTerms?: string;
 }
 
 export interface ProductResponse {
@@ -474,6 +480,17 @@ export interface InvoiceLine {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  stockDeducted?: boolean;
+  isOverOrdered?: boolean;
+  availableStockAtInvoice?: number;
+  deficitQty?: number;
+  remainingStock?: number;
+  sourcingStatus?: "Fulfilled from Stock" | "Pending Sourcing Details" | "Sourced Externally";
+  sourcingSupplier?: string;
+  sourcingReference?: string;
+  sourcingDate?: string;
+  sourcingCost?: number;
+  sourcingNotes?: string;
 }
 
 export interface Invoice {
@@ -498,6 +515,14 @@ export interface Invoice {
   amountPaid: number;
   outstandingBalance: number;
   status: "Draft" | "Issued" | "Partially Paid" | "Paid" | "Overdue" | "Cancelled" | "Void";
+  stockDeducted?: boolean;
+  hasStockDeficit?: boolean;
+  deficitItemsCount?: number;
+  sourcingResolved?: boolean;
+  sourcingNotes?: string;
+  reversalNotes?: string;
+  reversedAt?: string;
+  reversedBy?: string;
   notes?: string;
   termsAndConditions?: string;
   currency?: string;

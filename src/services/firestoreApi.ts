@@ -1963,7 +1963,7 @@ export const receiptService = {
     return quotationService.calculate(payload);
   },
 
-  create: async (businessId: string, payload: { customerId: string; customerName?: string; customerEmail?: string; customerPhone?: string; customerAddress?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; paymentMethod?: string; bankAccountId?: string; referenceNumber?: string; notes?: string }, userName: string = "Cashier"): Promise<Receipt> => {
+  create: async (businessId: string, payload: { customerId: string; customerName?: string; customerEmail?: string; customerPhone?: string; customerAddress?: string; items: Array<{ productId: string; quantity: number }>; discountRate: number; taxRate?: number; paymentMethod?: string; bankAccountId?: string; referenceNumber?: string; notes?: string; skipStockDeduction?: boolean }, userName: string = "Cashier"): Promise<Receipt> => {
     const id = `rec-${Date.now()}`;
     const receiptNumber = await financialService.getNextSequenceNumber(businessId, "receipts", "REC");
     const path = `businesses/${businessId}/receipts/${id}`;
@@ -2008,25 +2008,27 @@ export const receiptService = {
           totalPrice: lineTotal
         });
 
-        const newQty = Math.max(0, prod.quantity - item.quantity);
-        let status: Product["status"] = "In Stock";
-        if (newQty <= 0) status = "Out Of Stock";
-        else if (newQty <= prod.minStock) status = "Low Stock";
+        if (!payload.skipStockDeduction) {
+          const newQty = Math.max(0, prod.quantity - item.quantity);
+          let status: Product["status"] = "In Stock";
+          if (newQty <= 0) status = "Out Of Stock";
+          else if (newQty <= prod.minStock) status = "Low Stock";
 
-        await updateDoc(prodRef, { quantity: newQty, status, updatedAt: new Date().toISOString() });
+          await updateDoc(prodRef, { quantity: newQty, status, updatedAt: new Date().toISOString() });
 
-        await stockMovementService.record(businessId, {
-          productId: item.productId,
-          productName: prod.name,
-          movementType: "Sale",
-          quantity: item.quantity,
-          previousStock: prod.quantity,
-          newStock: newQty,
-          reason: `Customer Sales Receipt #${receiptNumber}`,
-          referenceNumber: receiptNumber,
-          userId: "current-user",
-          userName,
-        });
+          await stockMovementService.record(businessId, {
+            productId: item.productId,
+            productName: prod.name,
+            movementType: "Sale",
+            quantity: item.quantity,
+            previousStock: prod.quantity,
+            newStock: newQty,
+            reason: `Customer Sales Receipt #${receiptNumber}`,
+            referenceNumber: receiptNumber,
+            userId: "current-user",
+            userName,
+          });
+        }
       }
     }
 
@@ -2322,23 +2324,96 @@ export const invoiceService = {
     const lines: InvoiceLine[] = [];
     let subtotal = 0;
 
+    const currentUser = auth.currentUser;
+    const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "Admin");
+    const userEmail = currentUser?.email || "";
+    const userUid = currentUser?.uid || "unknown";
+    const nowIso = new Date().toISOString();
+
     for (const item of payload.items) {
       try {
-        const prodSnap = await getDoc(doc(db, "businesses", businessId, "products", item.productId));
+        const prodRef = doc(db, "businesses", businessId, "products", item.productId);
+        const prodSnap = await getDoc(prodRef);
         if (prodSnap.exists()) {
           const prod = prodSnap.data() as Product;
-          const lineTotal = item.quantity * prod.sellingPrice;
+          const unitPrice = prod.sellingPrice || 0;
+          const lineTotal = item.quantity * unitPrice;
           subtotal += lineTotal;
+
+          const currentStock = Number(prod.quantity) || 0;
+          const newStock = currentStock - item.quantity; // Automatically deducts; can go negative without throwing error
+          const isOverOrdered = item.quantity > currentStock;
+          const deficitQty = isOverOrdered ? (item.quantity - currentStock) : 0;
+
+          let newStatus: Product["status"] = "In Stock";
+          if (newStock <= 0) {
+            newStatus = "Out Of Stock";
+          } else if (newStock <= (prod.minStock || 0)) {
+            newStatus = "Low Stock";
+          }
+
+          // Automatically update product stock in database
+          await updateDoc(prodRef, {
+            quantity: newStock,
+            status: newStatus,
+            updatedAt: nowIso
+          });
+
+          // Record stock movement dispatch
+          await stockMovementService.record(businessId, {
+            productId: item.productId,
+            productName: prod.name,
+            movementType: "Sale",
+            quantity: item.quantity,
+            previousStock: currentStock,
+            newStock: newStock,
+            reason: isOverOrdered 
+              ? `Dispatched on Invoice #${invoiceNumber} [STOCK DEFICIT: ordered ${item.quantity}, had ${currentStock} in stock]` 
+              : `Dispatched on Invoice #${invoiceNumber}`,
+            referenceNumber: invoiceNumber,
+            userId: userUid,
+            userName,
+          });
+
           lines.push({
             productId: item.productId,
             productName: prod.name,
+            sku: prod.sku || "",
             quantity: item.quantity,
-            unitPrice: prod.sellingPrice,
-            totalPrice: lineTotal
+            unitPrice,
+            totalPrice: lineTotal,
+            stockDeducted: true,
+            isOverOrdered,
+            availableStockAtInvoice: currentStock,
+            deficitQty,
+            remainingStock: newStock,
+            sourcingStatus: isOverOrdered ? "Pending Sourcing Details" : "Fulfilled from Stock"
           });
+        } else {
+          lines.push({
+            productId: item.productId,
+            productName: "Item",
+            quantity: item.quantity,
+            unitPrice: 50,
+            totalPrice: item.quantity * 50,
+            stockDeducted: false,
+            isOverOrdered: false,
+            deficitQty: 0
+          });
+          subtotal += item.quantity * 50;
         }
-      } catch {
-        lines.push({ productId: item.productId, productName: "Item", quantity: item.quantity, unitPrice: 50, totalPrice: item.quantity * 50 });
+      } catch (err) {
+        console.warn(`Error processing product ${item.productId} for invoice:`, err);
+        lines.push({
+          productId: item.productId,
+          productName: "Item",
+          quantity: item.quantity,
+          unitPrice: 50,
+          totalPrice: item.quantity * 50,
+          stockDeducted: false,
+          isOverOrdered: false,
+          deficitQty: 0
+        });
         subtotal += item.quantity * 50;
       }
     }
@@ -2346,15 +2421,12 @@ export const invoiceService = {
     const discountRate = payload.discountRate || 0;
     const discountAmount = subtotal * discountRate;
     const afterDiscount = subtotal - discountAmount;
-    const taxRate = 0;
-    const taxAmount = 0;
-    const total = afterDiscount;
+    const taxRate = payload.taxRate || 0;
+    const taxAmount = afterDiscount * taxRate;
+    const total = afterDiscount + taxAmount;
 
-    const currentUser = auth.currentUser;
-    const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "Admin");
-    const userEmail = currentUser?.email || "";
-    const userUid = currentUser?.uid || "unknown";
-    const nowIso = new Date().toISOString();
+    const hasStockDeficit = lines.some(l => l.isOverOrdered);
+    const deficitItemsCount = lines.filter(l => l.isOverOrdered).length;
 
     const invoice: Invoice = {
       id,
@@ -2378,6 +2450,10 @@ export const invoiceService = {
       amountPaid: 0,
       outstandingBalance: total,
       status: payload.status || "Issued",
+      stockDeducted: true,
+      hasStockDeficit,
+      deficitItemsCount,
+      sourcingResolved: !hasStockDeficit,
       notes: payload.notes || "",
       termsAndConditions: payload.termsAndConditions || "Payment is due within 14 days of invoice date.",
       currency: "$",
@@ -2401,9 +2477,9 @@ export const invoiceService = {
         action: "INVOICE_CREATED",
         userEmail,
         userName,
-        details: `Created Invoice #${invoiceNumber} for '${customerName}' (Total: $${total.toFixed(2)})`,
+        details: `Created Invoice #${invoiceNumber} for '${customerName}' (Total: $${total.toFixed(2)})${hasStockDeficit ? ` [FLAGGED: ${deficitItemsCount} deficit line(s) require external sourcing]` : ""}`,
         targetId: id,
-        severity: "info"
+        severity: hasStockDeficit ? "warning" : "info"
       });
 
       return invoice;
@@ -2552,7 +2628,8 @@ export const invoiceService = {
       paymentMethod: payload.paymentMethod || "Cash",
       bankAccountId: payload.bankAccountId,
       referenceNumber: payload.referenceNumber || `INV-${inv.invoiceNumber}`,
-      notes: payload.notes || `Payment for Invoice #${inv.invoiceNumber}`
+      notes: payload.notes || `Payment for Invoice #${inv.invoiceNumber}`,
+      skipStockDeduction: true
     }, activeUserName);
 
     await updateDoc(doc(db, "businesses", businessId, "receipts", receipt.id), {
@@ -2591,6 +2668,285 @@ export const invoiceService = {
     });
 
     return { receipt, invoice: updatedInvoice };
+  },
+
+  delete: async (businessId: string, id: string): Promise<void> => {
+    const path = `businesses/${businessId}/invoices/${id}`;
+    try {
+      const invSnap = await getDoc(doc(db, "businesses", businessId, "invoices", id));
+      if (!invSnap.exists()) {
+        throw new Error("Invoice not found.");
+      }
+      const inv = { id: invSnap.id, ...invSnap.data() } as Invoice;
+
+      const currentUser = auth.currentUser;
+      const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "Admin");
+      const userEmail = currentUser?.email || "";
+      const userUid = currentUser?.uid || "unknown";
+
+      // 1. Automatically restore deducted product quantities back into inventory
+      if (inv.stockDeducted !== false && Array.isArray(inv.lines)) {
+        for (const line of inv.lines) {
+          try {
+            const prodRef = doc(db, "businesses", businessId, "products", line.productId);
+            const prodSnap = await getDoc(prodRef);
+            if (prodSnap.exists()) {
+              const prod = prodSnap.data() as Product;
+              const currentStock = Number(prod.quantity) || 0;
+              const restoredStock = currentStock + line.quantity;
+
+              let newStatus: Product["status"] = "In Stock";
+              if (restoredStock <= 0) {
+                newStatus = "Out Of Stock";
+              } else if (restoredStock <= (prod.minStock || 0)) {
+                newStatus = "Low Stock";
+              }
+
+              await updateDoc(prodRef, {
+                quantity: restoredStock,
+                status: newStatus,
+                updatedAt: new Date().toISOString()
+              });
+
+              await stockMovementService.record(businessId, {
+                productId: line.productId,
+                productName: line.productName,
+                movementType: "Adjustment",
+                quantity: line.quantity,
+                previousStock: currentStock,
+                newStock: restoredStock,
+                reason: `Stock restored upon deletion of Invoice #${inv.invoiceNumber}`,
+                referenceNumber: inv.invoiceNumber,
+                userId: userUid,
+                userName,
+              });
+            }
+          } catch (e) {
+            console.warn(`Failed to restore stock for product ${line.productId}:`, e);
+          }
+        }
+      }
+
+      // 2. If generated from a Quotation, revert the quotation's converted status
+      if (inv.quotationId) {
+        try {
+          await updateDoc(doc(db, "businesses", businessId, "quotations", inv.quotationId), {
+            isConverted: false,
+            invoiceId: null,
+            invoiceNumber: null,
+            status: "Accepted",
+            updatedAt: new Date().toISOString()
+          });
+        } catch (e) {
+          console.warn("Could not revert quotation converted status:", e);
+        }
+      }
+
+      // 3. If there were payment receipts, void them
+      if (inv.paymentIds && inv.paymentIds.length > 0) {
+        for (const rId of inv.paymentIds) {
+          try {
+            await updateDoc(doc(db, "businesses", businessId, "receipts", rId), {
+              approvalStatus: "Cancelled",
+              notes: `[VOIDED - Parent Invoice #${inv.invoiceNumber} deleted]`
+            });
+          } catch (e) {
+            console.warn("Could not cancel receipt linked to deleted invoice:", e);
+          }
+        }
+      }
+
+      // 4. Delete invoice document
+      await deleteDoc(doc(db, "businesses", businessId, "invoices", id));
+
+      // 5. System log
+      await systemLogService.logAction(businessId, {
+        category: "Invoice Management",
+        action: "INVOICE_DELETED",
+        userEmail,
+        userName,
+        details: `Deleted Invoice #${inv.invoiceNumber} (Total: $${(inv.total || 0).toFixed(2)}). Stock restored to inventory for ${inv.lines?.length || 0} product(s).`,
+        targetId: id,
+        severity: "warning"
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
+  },
+
+  reversePayment: async (businessId: string, id: string, notes?: string): Promise<Invoice> => {
+    const path = `businesses/${businessId}/invoices/${id}`;
+    try {
+      const invSnap = await getDoc(doc(db, "businesses", businessId, "invoices", id));
+      if (!invSnap.exists()) {
+        throw new Error("Invoice not found.");
+      }
+      const inv = { id: invSnap.id, ...invSnap.data() } as Invoice;
+
+      const currentUser = auth.currentUser;
+      const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "Admin");
+      const userEmail = currentUser?.email || "";
+      const userUid = currentUser?.uid || "unknown";
+      const nowIso = new Date().toISOString();
+
+      const prevPaid = inv.amountPaid || 0;
+
+      // Reset payment fields on invoice back to Issued with full outstanding balance
+      const refDoc = doc(db, "businesses", businessId, "invoices", id);
+      await updateDoc(refDoc, {
+        amountPaid: 0,
+        outstandingBalance: inv.total,
+        status: "Issued",
+        paymentIds: [],
+        receiptNumbers: [],
+        reversalNotes: notes || "Payment marked in error and reversed by user",
+        reversedAt: nowIso,
+        reversedBy: userName,
+        updatedByUid: userUid,
+        updatedByName: userName,
+        updatedByEmail: userEmail,
+        updatedAt: nowIso
+      });
+
+      // Mark linked receipts as Cancelled/Void
+      if (inv.paymentIds && inv.paymentIds.length > 0) {
+        for (const rId of inv.paymentIds) {
+          try {
+            await updateDoc(doc(db, "businesses", businessId, "receipts", rId), {
+              approvalStatus: "Cancelled",
+              notes: `[PAYMENT REVERSED] ${notes || "Payment marked in error for Invoice #" + inv.invoiceNumber}`
+            });
+          } catch (e) {
+            console.warn("Could not cancel linked receipt:", e);
+          }
+        }
+      }
+
+      await systemLogService.logAction(businessId, {
+        category: "Invoice Management",
+        action: "INVOICE_PAYMENT_REVERSED",
+        userEmail,
+        userName,
+        details: `Reversed payment of $${prevPaid.toFixed(2)} on Invoice #${inv.invoiceNumber}. Status reverted to 'Issued' with full outstanding balance $${(inv.total || 0).toFixed(2)}.`,
+        targetId: id,
+        severity: "warning"
+      });
+
+      const updatedSnap = await getDoc(refDoc);
+      return { id: updatedSnap.id, ...updatedSnap.data() } as Invoice;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  },
+
+  updateSourcingDetails: async (businessId: string, id: string, payload: {
+    sourcingNotes: string;
+    lineUpdates?: Array<{
+      productId: string;
+      sourcingSupplier?: string;
+      sourcingReference?: string;
+      sourcingDate?: string;
+      sourcingCost?: number;
+      sourcingNotes?: string;
+      adjustInventoryStock?: boolean;
+    }>;
+  }): Promise<Invoice> => {
+    const path = `businesses/${businessId}/invoices/${id}`;
+    try {
+      const invSnap = await getDoc(doc(db, "businesses", businessId, "invoices", id));
+      if (!invSnap.exists()) throw new Error("Invoice not found.");
+      const inv = { id: invSnap.id, ...invSnap.data() } as Invoice;
+
+      const currentUser = auth.currentUser;
+      const userName = currentUser?.displayName || (currentUser?.email ? currentUser.email.split("@")[0] : "Admin");
+      const userEmail = currentUser?.email || "";
+      const userUid = currentUser?.uid || "unknown";
+
+      const updatedLines = [...inv.lines];
+
+      if (payload.lineUpdates && payload.lineUpdates.length > 0) {
+        for (const update of payload.lineUpdates) {
+          const idx = updatedLines.findIndex(l => l.productId === update.productId);
+          if (idx !== -1) {
+            const line = updatedLines[idx];
+            updatedLines[idx] = {
+              ...line,
+              sourcingStatus: "Sourced Externally",
+              sourcingSupplier: update.sourcingSupplier || line.sourcingSupplier || "",
+              sourcingReference: update.sourcingReference || line.sourcingReference || "",
+              sourcingDate: update.sourcingDate || line.sourcingDate || new Date().toISOString().split("T")[0],
+              sourcingCost: update.sourcingCost !== undefined ? update.sourcingCost : line.sourcingCost,
+              sourcingNotes: update.sourcingNotes || line.sourcingNotes || "",
+            };
+
+            // If user checked to adjust/replenish inventory for the deficit units from this source
+            if (update.adjustInventoryStock && line.deficitQty && line.deficitQty > 0) {
+              try {
+                const prodRef = doc(db, "businesses", businessId, "products", update.productId);
+                const pSnap = await getDoc(prodRef);
+                if (pSnap.exists()) {
+                  const p = pSnap.data() as Product;
+                  const currentStock = Number(p.quantity) || 0;
+                  const newStock = currentStock + line.deficitQty;
+                  let st: Product["status"] = "In Stock";
+                  if (newStock <= 0) st = "Out Of Stock";
+                  else if (newStock <= (p.minStock || 0)) st = "Low Stock";
+
+                  await updateDoc(prodRef, {
+                    quantity: newStock,
+                    status: st,
+                    updatedAt: new Date().toISOString()
+                  });
+
+                  await stockMovementService.record(businessId, {
+                    productId: update.productId,
+                    productName: line.productName,
+                    movementType: "Purchase",
+                    quantity: line.deficitQty,
+                    previousStock: currentStock,
+                    newStock: newStock,
+                    reason: `Stock replenished for Invoice #${inv.invoiceNumber} (Supplier: ${update.sourcingSupplier || "External Supplier"})`,
+                    referenceNumber: update.sourcingReference || `SRC-${inv.invoiceNumber}`,
+                    userId: userUid,
+                    userName,
+                  });
+                }
+              } catch (e) {
+                console.warn("Failed to adjust inventory for sourced line:", e);
+              }
+            }
+          }
+        }
+      }
+
+      const allResolved = updatedLines.every(l => !l.isOverOrdered || l.sourcingStatus === "Sourced Externally");
+
+      const refDoc = doc(db, "businesses", businessId, "invoices", id);
+      await updateDoc(refDoc, {
+        lines: updatedLines,
+        sourcingNotes: payload.sourcingNotes || inv.sourcingNotes || "",
+        sourcingResolved: allResolved,
+        updatedByUid: userUid,
+        updatedByName: userName,
+        updatedByEmail: userEmail,
+        updatedAt: new Date().toISOString()
+      });
+
+      await systemLogService.logAction(businessId, {
+        category: "Invoice Management",
+        action: "INVOICE_SOURCING_UPDATED",
+        userEmail,
+        userName,
+        details: `Updated external procurement & sourcing origin details on Invoice #${inv.invoiceNumber}.`,
+        targetId: id,
+        severity: "info"
+      });
+
+      const snap = await getDoc(refDoc);
+      return { id: snap.id, ...snap.data() } as Invoice;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
   }
 };
 

@@ -430,10 +430,10 @@ export const Products: React.FC = () => {
               <button
                 key={status}
                 onClick={() => { setStatusFilter(status); setPage(1); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   statusFilter === status 
                     ? "bg-slate-900 text-white shadow-xs" 
-                    : "text-slate-600 hover:text-slate-905"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                 }`}
               >
                 {status}
@@ -677,7 +677,7 @@ export const Products: React.FC = () => {
               exit={{ scale: 0.95, opacity: 0 }}
               className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden"
             >
-              <div className="px-6 py-4 border-b border-slate-150 bg-slate-50 flex items-center justify-between">
+              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                 <h3 className="font-black text-slate-900 tracking-tight text-lg">
                   {editingProduct ? "Modify Product Listing" : "Catalogue New Product"}
                 </h3>

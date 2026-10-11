@@ -157,7 +157,7 @@ export const Customers: React.FC = () => {
         <button
           onClick={handleOpenAddForm}
           id="btn-add-customer"
-          className="flex items-center gap-2 px-4 py-2.5 bg-slate-905 text-white text-xs font-bold rounded-xl shadow-md uppercase tracking-wider transition-all self-start sm:self-center"
+          className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-md uppercase tracking-wider transition-all self-start sm:self-center cursor-pointer"
         >
           <Plus size={15} />
           <span>New Customer</span>
@@ -254,11 +254,11 @@ export const Customers: React.FC = () => {
               exit={{ scale: 0.95, opacity: 0 }}
               className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden"
             >
-              <div className="px-6 py-4 border-b border-slate-150 bg-slate-50 flex items-center justify-between">
+              <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                 <h3 className="font-black text-slate-900 tracking-tight text-lg">
                   {editingCustomer ? "Update Contact Profile" : "Register Trade Customer"}
                 </h3>
-                <button onClick={handleCloseForm} className="text-slate-400 hover:text-slate-650 transition-colors p-1 rounded-lg">
+                <button onClick={handleCloseForm} className="text-slate-400 hover:text-slate-700 transition-colors p-1 rounded-lg">
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
@@ -332,7 +332,7 @@ export const Customers: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleCloseForm}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold rounded-lg transition-colors"
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold rounded-lg transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -340,7 +340,7 @@ export const Customers: React.FC = () => {
                     type="submit"
                     id="btn-customer-submit"
                     disabled={isSubmitting}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-950 text-white text-sm font-bold rounded-lg shadow-md transition-all"
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-950 text-white text-sm font-bold rounded-lg shadow-md transition-all cursor-pointer disabled:opacity-50"
                   >
                     {isSubmitting ? "Processing..." : editingCustomer ? "Save Changes" : "Create Account"}
                   </button>
