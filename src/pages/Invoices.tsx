@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { UnifiedDocumentModal } from "../components/UnifiedDocumentModal";
+import { ProductAutocompleteSelect } from "../components/ProductAutocompleteSelect";
 
 // Invoice Form Schema
 const invoiceFormSchema = z.object({
@@ -593,10 +594,36 @@ export const Invoices: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {filteredInvoices.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr 
+                      key={inv.id} 
+                      className={`transition-colors ${
+                        inv.hasStockDeficit && !inv.sourcingResolved 
+                          ? 'bg-amber-50/40 hover:bg-amber-50/80 border-l-4 border-l-amber-500' 
+                          : 'hover:bg-slate-50/80'
+                      }`}
+                    >
                       <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                        <div className="flex flex-col">
-                          <span>{inv.invoiceNumber}</span>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{inv.invoiceNumber}</span>
+                            {inv.hasStockDeficit && (
+                              <span 
+                                title={
+                                  inv.sourcingResolved 
+                                    ? "External origin & supplier references recorded" 
+                                    : "Stock Deficit: Item quantity exceeded warehouse inventory at dispatch"
+                                }
+                                className={`px-1.5 py-0.5 rounded text-3xs font-sans font-bold flex items-center gap-0.5 ${
+                                  inv.sourcingResolved 
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                    : 'bg-amber-100 text-amber-900 border border-amber-300'
+                                }`}
+                              >
+                                <AlertTriangle size={10} className={inv.sourcingResolved ? 'text-emerald-700' : 'text-amber-600'} />
+                                {inv.sourcingResolved ? "Sourced" : "Deficit"}
+                              </span>
+                            )}
+                          </div>
                           {inv.quotationNumber && (
                             <span className="text-3xs text-blue-600 font-sans flex items-center gap-0.5">
                               From {inv.quotationNumber}
@@ -614,14 +641,14 @@ export const Invoices: React.FC = () => {
                       <td className="py-3.5 px-4 text-right font-bold text-amber-600">${(inv.outstandingBalance || 0).toFixed(2)}</td>
                       <td className="py-3.5 px-4">{getStatusBadge(inv.status)}</td>
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center justify-center gap-1.5">
+                        <div className="flex items-center justify-center gap-1.5 flex-wrap">
                           {/* View Detail */}
                           <button
                             onClick={() => { setSelectedInvoiceId(inv.id); setView("view"); }}
                             className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors cursor-pointer"
                             title="View Invoice Details"
                           >
-                            <Eye size={15} />
+                            <Eye size={14} />
                           </button>
 
                           {/* Print / Download PDF */}
@@ -630,20 +657,59 @@ export const Invoices: React.FC = () => {
                             className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors cursor-pointer border border-blue-200"
                             title="Print & Download PDF"
                           >
-                            <Printer size={15} />
+                            <Printer size={14} />
                           </button>
 
                           {/* Record Payment (if outstanding) */}
                           {inv.status !== "Paid" && inv.status !== "Cancelled" && inv.status !== "Void" && (
                             <button
                               onClick={() => handleOpenPaymentModal(inv)}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-3xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
+                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-3xs font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
                               title="Record Settlement / Generate Receipt"
                             >
-                              <ReceiptIcon size={13} />
+                              <ReceiptIcon size={12} />
                               Pay
                             </button>
                           )}
+
+                          {/* Reverse Payment (if any payment was recorded or marked Paid by mistake) */}
+                          {((inv.amountPaid || 0) > 0 || inv.status === "Paid" || inv.status === "Partially Paid") && (
+                            <button
+                              onClick={() => {
+                                setInvoiceToReversePayment(inv);
+                                setReversalNotes("");
+                              }}
+                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-3xs font-bold transition-colors cursor-pointer border border-amber-300 flex items-center gap-1"
+                              title="Reverse payment back to Unpaid/Issued (e.g. if clicked Paid by mistake)"
+                            >
+                              <RefreshCw size={11} className="text-amber-600" />
+                              Reverse
+                            </button>
+                          )}
+
+                          {/* Sourcing Details (if stock deficit flagged) */}
+                          {inv.hasStockDeficit && (
+                            <button
+                              onClick={() => handleOpenSourcingModal(inv)}
+                              className={`p-1.5 rounded-lg transition-colors cursor-pointer border ${
+                                inv.sourcingResolved
+                                  ? 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
+                                  : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300'
+                              }`}
+                              title={inv.sourcingResolved ? "Edit Sourcing Details" : "Record Supplier / Sourcing Details for Deficit Items"}
+                            >
+                              <Building2 size={13} />
+                            </button>
+                          )}
+
+                          {/* Delete Invoice (restores stock) */}
+                          <button
+                            onClick={() => setInvoiceToDelete(inv)}
+                            className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 rounded-lg transition-colors cursor-pointer border border-rose-200"
+                            title="Delete Invoice and restore product quantities to inventory"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -727,15 +793,17 @@ export const Invoices: React.FC = () => {
                   <div key={field.id} className="grid grid-cols-12 gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
                     <div className="col-span-6 md:col-span-6">
                       <label className="block text-3xs font-bold text-slate-400 uppercase mb-1">Product Component</label>
-                      <select
-                        {...register(`items.${idx}.productId` as const)}
-                        className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-hidden"
-                      >
-                        <option value="">-- Choose Product --</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>{p.name} - ${p.sellingPrice.toFixed(2)} (In Stock: {p.quantity})</option>
-                        ))}
-                      </select>
+                      <ProductAutocompleteSelect
+                        products={products}
+                        value={prodId || ""}
+                        onChange={(newId) => {
+                          setValue(`items.${idx}.productId`, newId, { shouldValidate: true, shouldDirty: true });
+                        }}
+                        placeholder="Search product name, SKU, or keywords..."
+                        autoFocus={!prodId}
+                        error={(errors.items as any)?.[idx]?.productId?.message}
+                        id={`invoice-item-select-${idx}`}
+                      />
                     </div>
 
                     <div className="col-span-3 md:col-span-2">
@@ -764,6 +832,19 @@ export const Invoices: React.FC = () => {
                         </button>
                       )}
                     </div>
+
+                    {/* Stock Deficit Warning (non-blocking) */}
+                    {selectedProd && qty > selectedProd.quantity && (
+                      <div className="col-span-12 px-3 py-1.5 bg-amber-50/90 border border-amber-200/90 rounded-lg flex items-center justify-between text-3xs font-medium text-amber-900 animate-fadeIn">
+                        <span className="flex items-center gap-1.5 font-bold">
+                          <AlertTriangle size={13} className="text-amber-600 shrink-0" />
+                          Stock Deficit Notice: Ordered {qty} units, but only {selectedProd.quantity} currently on-hand in inventory.
+                        </span>
+                        <span className="bg-amber-200 text-amber-950 font-bold px-2 py-0.5 rounded text-3xs">
+                          +{qty - selectedProd.quantity} will be flagged for external sourcing
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -862,7 +943,7 @@ export const Invoices: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {/* Print PDF */}
                 <button
                   onClick={() => { setPreviewDocument({ type: "invoice", data: selectedInvoice }); setIsPreviewModalOpen(true); }}
@@ -880,8 +961,73 @@ export const Invoices: React.FC = () => {
                     <ReceiptIcon size={15} /> Record Payment
                   </button>
                 )}
+
+                {/* Reverse Payment (if marked Paid by mistake) */}
+                {((selectedInvoice.amountPaid || 0) > 0 || selectedInvoice.status === "Paid" || selectedInvoice.status === "Partially Paid") && (
+                  <button
+                    onClick={() => {
+                      setInvoiceToReversePayment(selectedInvoice);
+                      setReversalNotes("");
+                    }}
+                    className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 border border-amber-300"
+                    title="Reverse payment back to Unpaid/Issued"
+                  >
+                    <RefreshCw size={14} className="text-amber-600" /> Reverse Payment
+                  </button>
+                )}
+
+                {/* Delete Invoice (restores stock) */}
+                <button
+                  onClick={() => setInvoiceToDelete(selectedInvoice)}
+                  className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 border border-rose-200"
+                  title="Delete invoice and restore product quantities to warehouse inventory"
+                >
+                  <Trash2 size={14} className="text-rose-600" /> Delete Invoice
+                </button>
               </div>
             </div>
+
+            {/* Stock Deficit / Special Order Banner */}
+            {selectedInvoice.hasStockDeficit && (
+              <div className="p-4 bg-amber-50/90 border border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs text-amber-900 animate-fadeIn">
+                <div className="flex items-start gap-3">
+                  <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl mt-0.5">
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-bold text-amber-950 text-sm">Stock Deficit / Special Order Flagged</h4>
+                      {selectedInvoice.sourcingResolved ? (
+                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-3xs font-bold flex items-center gap-1">
+                          <CheckCircle2 size={11} className="text-emerald-700" /> Sourcing Origin Logged
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-amber-200 text-amber-950 rounded-full text-3xs font-bold animate-pulse">
+                          Action Needed: Record Item Origin
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                      {selectedInvoice.sourcingResolved
+                        ? `External procurement origin and supplier references have been recorded for this order.`
+                        : `This invoice was dispatched with quantities exceeding on-hand warehouse stock. You can record where the items were obtained (supplier, reference, cost) to keep inventory traceable.`}
+                    </p>
+                    {selectedInvoice.sourcingNotes && (
+                      <p className="text-3xs font-mono text-amber-900 mt-2 bg-amber-100/70 p-2 rounded-lg border border-amber-200">
+                        <strong>Procurement Log:</strong> {selectedInvoice.sourcingNotes}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleOpenSourcingModal(selectedInvoice)}
+                  className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Building2 size={14} />
+                  {selectedInvoice.sourcingResolved ? "Edit Sourcing Details" : "Log Sourcing Details"}
+                </button>
+              </div>
+            )}
 
             {/* Financial Summary Box */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -901,7 +1047,7 @@ export const Invoices: React.FC = () => {
 
             {/* Itemized table */}
             <div>
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Invoice Line Items</h3>
+              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Invoice Line Items & Dispatch Status</h3>
               <div className="overflow-x-auto rounded-xl border border-slate-200">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
@@ -914,11 +1060,28 @@ export const Invoices: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
                     {selectedInvoice.lines.map((line, idx) => (
-                      <tr key={idx}>
-                        <td className="py-3 px-4 font-bold text-slate-800">{line.productName}</td>
-                        <td className="py-3 px-4 text-center">{line.quantity}</td>
-                        <td className="py-3 px-4 text-right">${line.unitPrice.toFixed(2)}</td>
-                        <td className="py-3 px-4 text-right font-bold text-slate-900">${line.totalPrice.toFixed(2)}</td>
+                      <tr key={idx} className={line.isOverOrdered ? "bg-amber-50/20" : ""}>
+                        <td className="py-3 px-4 font-bold text-slate-800">
+                          <div className="flex flex-col">
+                            <span>{line.productName}</span>
+                            {line.isOverOrdered && (
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded text-3xs font-bold flex items-center gap-1">
+                                  <AlertTriangle size={10} className="text-amber-600" />
+                                  Ordered &gt; stock (+{line.deficitQty} deficit units)
+                                </span>
+                                {line.sourcingSupplier && (
+                                  <span className="text-3xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded font-mono font-medium">
+                                    Supplier: <strong>{line.sourcingSupplier}</strong> {line.sourcingReference ? `(Ref: ${line.sourcingReference})` : ""}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono font-bold">{line.quantity}</td>
+                        <td className="py-3 px-4 text-right font-mono">${line.unitPrice.toFixed(2)}</td>
+                        <td className="py-3 px-4 text-right font-bold text-slate-900 font-mono">${line.totalPrice.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1204,6 +1367,393 @@ export const Invoices: React.FC = () => {
                 >
                   {recordPaymentMutation.isPending ? <Loader2 className="animate-spin" size={15} /> : <ReceiptIcon size={15} />}
                   Confirm Payment & Issue Receipt
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ============================================================= */}
+      {/* MODAL: REVERSE PAYMENT                                        */}
+      {/* ============================================================= */}
+      <AnimatePresence>
+        {invoiceToReversePayment && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-5"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2 text-amber-600">
+                  <RefreshCw size={20} />
+                  <h3 className="font-bold text-slate-900 text-base">Reverse Invoice Payment</h3>
+                </div>
+                <button
+                  onClick={() => setInvoiceToReversePayment(null)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 space-y-2 text-xs text-amber-900">
+                <p className="font-bold text-amber-950 flex items-center gap-1.5">
+                  <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                  Made a mistake clicking &apos;Paid&apos;?
+                </p>
+                <p className="leading-relaxed">
+                  Reversing this payment will reset the paid amount on Invoice <strong className="font-mono">#{invoiceToReversePayment.invoiceNumber}</strong> from <strong className="font-mono">${(invoiceToReversePayment.amountPaid || 0).toFixed(2)}</strong> back to <strong className="font-mono">$0.00</strong>, revert its status to <strong className="font-semibold">Issued (Unpaid)</strong>, and void linked payment receipt records.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">
+                  Reason for Payment Reversal (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={reversalNotes}
+                  onChange={(e) => setReversalNotes(e.target.value)}
+                  placeholder="e.g. Marked Paid by accident, payment check bounced, etc."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setInvoiceToReversePayment(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={reversePaymentMutation.isPending}
+                  onClick={() => reversePaymentMutation.mutate({ id: invoiceToReversePayment.id, notes: reversalNotes })}
+                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs disabled:opacity-50 flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  {reversePaymentMutation.isPending ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
+                  Confirm Reversal & Mark Unpaid
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ============================================================= */}
+      {/* MODAL: DELETE INVOICE (RESTORES INVENTORY STOCK)              */}
+      {/* ============================================================= */}
+      <AnimatePresence>
+        {invoiceToDelete && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-5"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2 text-rose-600">
+                  <Trash2 size={20} />
+                  <h3 className="font-bold text-slate-900 text-base">Delete Sales Invoice</h3>
+                </div>
+                <button
+                  onClick={() => setInvoiceToDelete(null)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
+                <div className="flex justify-between text-slate-700 font-bold">
+                  <span>Invoice Number:</span>
+                  <span className="font-mono text-slate-900">#{invoiceToDelete.invoiceNumber}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Customer:</span>
+                  <span>{invoiceToDelete.customerName}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Invoice Amount:</span>
+                  <span className="font-mono font-bold">${(invoiceToDelete.total || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Current Status:</span>
+                  <span className="font-semibold">{invoiceToDelete.status}</span>
+                </div>
+              </div>
+
+              {/* Stock Return Guarantee Alert */}
+              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900 space-y-1">
+                <p className="font-bold text-emerald-950 flex items-center gap-1.5">
+                  <Package size={15} className="text-emerald-700 shrink-0" />
+                  Automatic Warehouse Stock Return
+                </p>
+                <p className="leading-relaxed">
+                  Deleting this invoice will automatically replenish and restore all <strong className="font-mono font-bold">{invoiceToDelete.lines?.reduce((acc, l) => acc + (l.quantity || 0), 0) || 0} unit(s)</strong> back into your product inventory.
+                </p>
+              </div>
+
+              {((invoiceToDelete.amountPaid || 0) > 0 || invoiceToDelete.status === "Paid") && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-3xs text-amber-900 leading-relaxed">
+                  ⚠️ <strong>Notice:</strong> This invoice currently has recorded payments (${(invoiceToDelete.amountPaid || 0).toFixed(2)}). Deleting it will void the associated transaction records.
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setInvoiceToDelete(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={deleteInvoiceMutation.isPending}
+                  onClick={() => deleteInvoiceMutation.mutate(invoiceToDelete.id)}
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs disabled:opacity-50 flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  {deleteInvoiceMutation.isPending ? <Loader2 className="animate-spin" size={15} /> : <Trash2 size={15} />}
+                  Delete & Restore Stock
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ============================================================= */}
+      {/* MODAL: SOURCING & PROCUREMENT ORIGIN DETAILS                  */}
+      {/* ============================================================= */}
+      <AnimatePresence>
+        {isSourcingModalOpen && sourcingInvoice && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2 text-amber-600">
+                  <Building2 size={20} />
+                  <h3 className="font-bold text-slate-900 text-base">
+                    Sourcing & Origin Details — #{sourcingInvoice.invoiceNumber}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => { setIsSourcingModalOpen(false); setSourcingInvoice(null); }}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                <p className="font-bold text-amber-950 flex items-center gap-1.5 mb-1">
+                  <AlertTriangle size={14} className="text-amber-700" />
+                  Special Order & External Stock Fulfillment
+                </p>
+                Record supplier names, procurement references, or purchase notes for items dispatched to satisfy this order. You can also replenish warehouse inventory if you have received the supplier delivery.
+              </div>
+
+              {/* General Sourcing Notes */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">
+                  General Procurement & Fulfillment Notes
+                </label>
+                <textarea
+                  rows={2}
+                  value={sourcingGeneralNotes}
+                  onChange={(e) => setSourcingGeneralNotes(e.target.value)}
+                  placeholder="e.g. Specially procured from local distributors to fulfill customer requirement..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs focus:outline-hidden text-slate-900 font-medium"
+                />
+              </div>
+
+              {/* Line-by-Line Sourcing Configuration */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Itemized Sourcing Details
+                </h4>
+
+                {sourcingInvoice.lines.map((line) => {
+                  const state = sourcingLineFormState[line.productId] || {
+                    sourcingSupplier: "",
+                    sourcingReference: "",
+                    sourcingDate: new Date().toISOString().split("T")[0],
+                    sourcingCost: line.unitPrice,
+                    sourcingNotes: "",
+                    adjustInventoryStock: Boolean(line.isOverOrdered && (line.deficitQty || 0) > 0),
+                  };
+
+                  return (
+                    <div 
+                      key={line.productId} 
+                      className={`p-4 rounded-xl border space-y-3 text-xs ${
+                        line.isOverOrdered 
+                          ? 'bg-amber-50/40 border-amber-200' 
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                          <strong className="text-slate-900 text-xs">{line.productName}</strong>
+                          <span className="text-slate-500 font-mono ml-2">(Qty: {line.quantity})</span>
+                        </div>
+                        {line.isOverOrdered && (
+                          <span className="px-2 py-0.5 bg-amber-100 text-amber-900 rounded-full text-3xs font-bold border border-amber-300">
+                            +{line.deficitQty} deficit units backordered
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-3xs font-bold text-slate-400 uppercase mb-1">
+                            Supplier / Sourcing Channel
+                          </label>
+                          <input
+                            type="text"
+                            list={`suppliers-list-${line.productId}`}
+                            value={state.sourcingSupplier}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSourcingLineFormState(prev => ({
+                                ...prev,
+                                [line.productId]: { ...state, sourcingSupplier: val }
+                              }));
+                            }}
+                            placeholder="Supplier or distributor name..."
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-hidden"
+                          />
+                          <datalist id={`suppliers-list-${line.productId}`}>
+                            {suppliers.map(s => (
+                              <option key={s.id} value={s.name} />
+                            ))}
+                          </datalist>
+                        </div>
+
+                        <div>
+                          <label className="block text-3xs font-bold text-slate-400 uppercase mb-1">
+                            PO / Delivery / Sourcing Reference #
+                          </label>
+                          <input
+                            type="text"
+                            value={state.sourcingReference}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSourcingLineFormState(prev => ({
+                                ...prev,
+                                [line.productId]: { ...state, sourcingReference: val }
+                              }));
+                            }}
+                            placeholder="e.g. PO-8921 or DN-441"
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono font-bold focus:outline-hidden"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-3xs font-bold text-slate-400 uppercase mb-1">
+                            Sourcing / Order Date
+                          </label>
+                          <input
+                            type="date"
+                            value={state.sourcingDate}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSourcingLineFormState(prev => ({
+                                ...prev,
+                                [line.productId]: { ...state, sourcingDate: val }
+                              }));
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs focus:outline-hidden"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-3xs font-bold text-slate-400 uppercase mb-1">
+                            Cost Price per Unit ($)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={state.sourcingCost}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setSourcingLineFormState(prev => ({
+                                ...prev,
+                                [line.productId]: { ...state, sourcingCost: val }
+                              }));
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-mono font-bold focus:outline-hidden"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Checkbox to replenish stock for this deficit */}
+                      {Boolean(line.isOverOrdered && (line.deficitQty || 0) > 0) && (
+                        <div className="pt-2 border-t border-amber-200/80 flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id={`replenish-${line.productId}`}
+                            checked={state.adjustInventoryStock}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setSourcingLineFormState(prev => ({
+                                ...prev,
+                                [line.productId]: { ...state, adjustInventoryStock: checked }
+                              }));
+                            }}
+                            className="h-4 w-4 rounded text-blue-600 border-slate-300 cursor-pointer"
+                          />
+                          <label htmlFor={`replenish-${line.productId}`} className="text-xs text-slate-700 cursor-pointer font-medium select-none">
+                            Received incoming stock: Replenish warehouse inventory (+{line.deficitQty} units)
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => { setIsSourcingModalOpen(false); setSourcingInvoice(null); }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={updateSourcingMutation.isPending}
+                  onClick={() => {
+                    const lineUpdates = Object.keys(sourcingLineFormState).map(pId => ({
+                      productId: pId,
+                      ...sourcingLineFormState[pId]
+                    }));
+                    updateSourcingMutation.mutate({
+                      id: sourcingInvoice.id,
+                      payload: {
+                        sourcingNotes: sourcingGeneralNotes,
+                        lineUpdates
+                      }
+                    });
+                  }}
+                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs disabled:opacity-50 flex items-center gap-2 cursor-pointer transition-colors"
+                >
+                  {updateSourcingMutation.isPending ? <Loader2 className="animate-spin" size={15} /> : <CheckCircle2 size={15} />}
+                  Save Sourcing & Origin Details
                 </button>
               </div>
             </motion.div>

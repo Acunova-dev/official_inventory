@@ -12,17 +12,28 @@ import {
   Shield, 
   Plus, 
   Edit3, 
+  Trash2,
   Loader2, 
   Lock,
   AlertOctagon
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { ROLE_DEFINITIONS, AppRole } from "../types/rbac";
 
 const userSchema = z.object({
   name: z.string().min(3, { message: "Name must be at least 3 characters." }),
   email: z.string().email({ message: "Invalid email formatting." }),
-  role: z.enum(["Principal Admin", "Inventory Manager", "Sales Person", "Staff Member", "Staff"]),
-  password: z.string().min(4, { message: "Specify password of at least 4 characters." }).optional().or(z.literal("")),
+  role: z.enum([
+    "Principal Admin", 
+    "Inventory Manager", 
+    "Sales Person", 
+    "Staff Member", 
+    "Accountant", 
+    "Warehouse Clerk", 
+    "Procurement Officer",
+    "Staff"
+  ]),
+  password: z.string().min(6, { message: "Specify password of at least 6 characters." }).optional().or(z.literal("")),
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
@@ -34,6 +45,7 @@ export const UsersManagement: React.FC = () => {
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
 
   // Load backend corporate personnel list
   const { data: rawUsers, isLoading } = useQuery({
@@ -86,12 +98,24 @@ export const UsersManagement: React.FC = () => {
     }
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => userService.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      showToast("Staff operator account deleted successfully.", "success");
+      setDeleteUserId(null);
+    },
+    onError: (err: any) => {
+      showToast(err.response?.data?.error || "Error deleting user account", "error");
+    }
+  });
+
   const handleOpenAddForm = () => {
     setEditingUser(null);
     reset({
       name: "",
       email: "",
-      role: "Staff",
+      role: "Sales Person",
       password: "",
     });
     setIsFormOpen(true);
@@ -206,22 +230,26 @@ export const UsersManagement: React.FC = () => {
                     </td>
                     <td className="py-4 px-6 text-slate-600 font-mono text-xs">{u.email}</td>
                     <td className="py-4 px-6">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
-                        u.role === "Principal Admin" 
-                          ? "bg-purple-50 text-purple-700 border border-purple-100" 
-                          : "bg-blue-50 text-blue-700 border border-blue-100"
-                      }`}>
-                        <Shield size={12} />
-                        <span>{u.role === "Staff" ? "Staff Member" : u.role}</span>
-                      </span>
+                      {(() => {
+                        const roleDef = ROLE_DEFINITIONS[u.role as AppRole];
+                        const badgeClass = roleDef?.badgeColor || (u.role === "Principal Admin" 
+                          ? "bg-purple-100 text-purple-800 border-purple-200" 
+                          : "bg-blue-100 text-blue-800 border-blue-200");
+                        return (
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${badgeClass}`}>
+                            <Shield size={12} />
+                            <span>{u.role === "Staff" ? "Staff Member" : u.role}</span>
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-4 px-6 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
                         !u.disabled 
-                          ? "bg-emerald-50 text-emerald-700" 
-                          : "bg-rose-50 text-rose-700"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
+                          : "bg-rose-50 text-rose-700 border border-rose-200"
                       }`}>
-                        {!u.disabled ? "Active Link" : "Credential Suspended"}
+                        {!u.disabled ? "Active" : "Suspended"}
                       </span>
                     </td>
                     <td className="py-4 px-6 text-right">
@@ -240,11 +268,22 @@ export const UsersManagement: React.FC = () => {
                         )}
                         <button
                           onClick={() => handleOpenEditForm(u)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors border border-slate-100"
+                          className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors border border-slate-200"
                           id={`btn-edit-user-${u.id}`}
+                          title="Edit User Profile"
                         >
                           <Edit3 size={14} />
                         </button>
+                        {currentAuthUser?.id !== u.id && (
+                          <button
+                            onClick={() => setDeleteUserId(u.id)}
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors border border-rose-200"
+                            id={`btn-delete-user-${u.id}`}
+                            title="Delete User Account"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -309,16 +348,19 @@ export const UsersManagement: React.FC = () => {
                     {...register("role" as any)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm font-semibold focus:outline-hidden"
                   >
-                    <option value="Inventory Manager">Inventory Manager (Stock Control, POs, GRN)</option>
-                    <option value="Sales Person">Sales Person (Quotations, Receipts, Customers)</option>
-                    <option value="Staff Member">Staff Member (General Operations)</option>
-                    <option value="Principal Admin">Principal Admin (Full Access & Security)</option>
+                    <option value="Sales Person">Sales Person (Quotations, Invoices, Receipts, Customers & Sales Hub)</option>
+                    <option value="Inventory Manager">Inventory Manager (Stock Levels, Catalog, POs & GRN)</option>
+                    <option value="Staff Member">Staff Member (General Operations & Front Desk)</option>
+                    <option value="Accountant">Accountant (Financial Ledgers, Cash Book & Banking)</option>
+                    <option value="Warehouse Clerk">Warehouse Clerk (Stock Transfers, Pick/Pack & GRN)</option>
+                    <option value="Procurement Officer">Procurement Officer (Purchase Orders & Suppliers)</option>
+                    <option value="Principal Admin">Principal Admin (Full Unrestricted Enterprise Access)</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                    {editingUser ? "Reset Password (Leave blank to keep existing)" : "Operator Security Password"}
+                    {editingUser ? "Reset Password (Leave blank to keep existing)" : "Operator Security Password (Min 6 Characters)"}
                   </label>
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
@@ -338,7 +380,7 @@ export const UsersManagement: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleCloseForm}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold rounded-lg transition-colors"
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold rounded-lg transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -346,9 +388,10 @@ export const UsersManagement: React.FC = () => {
                     type="submit"
                     id="btn-user-submit"
                     disabled={isSubmitting}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg shadow-md hover:shadow-lg transition-all"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center gap-2"
                   >
-                    {isSubmitting ? "Provisioning..." : editingUser ? "Save credentials" : "Create operator profile"}
+                    {isSubmitting && <Loader2 size={14} className="animate-spin" />}
+                    <span>{isSubmitting ? "Provisioning..." : editingUser ? "Save credentials" : "Create operator profile"}</span>
                   </button>
                 </div>
 
@@ -357,6 +400,44 @@ export const UsersManagement: React.FC = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Delete User Confirmation Modal */}
+      {deleteUserId && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 bg-rose-100 text-rose-600 rounded-xl flex items-center justify-center shrink-0">
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete User Account</h3>
+                <p className="text-xs text-slate-500">This action will permanently revoke this user's corporate access.</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              Are you sure you want to remove this staff profile? The operator will no longer be able to log in to this business workspace.
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteUserId(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate(deleteUserId)}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
+              >
+                {deleteMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                <span>Delete Account</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

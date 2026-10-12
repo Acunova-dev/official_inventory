@@ -491,6 +491,10 @@ export const userService = {
     const bId = await getActiveBusinessId();
     return fsUserService.update(bId, id, data);
   },
+  delete: async (id: string): Promise<void> => {
+    const bId = await getActiveBusinessId();
+    return fsUserService.delete(bId, id);
+  },
 };
 
 // -------------------------------------------------------------

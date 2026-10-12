@@ -39,6 +39,11 @@ export type Permission =
   | "reports.view.inventory"
   | "reports.view.financial"
   
+  // Document Vault & File Archive
+  | "documents.view"
+  | "documents.upload"
+  | "documents.manage"
+
   // Administration & Security
   | "users.manage"
   | "settings.manage"
@@ -74,6 +79,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
       "fulfilment.view", "fulfilment.prepare", "fulfilment.dispatch", "fulfilment.collect",
       "financials.view", "financials.manage", "vouchers.approve",
       "reports.view.sales", "reports.view.inventory", "reports.view.financial",
+      "documents.view", "documents.upload", "documents.manage",
       "users.manage", "settings.manage", "system_logs.view", "account.view"
     ]
   },
@@ -87,6 +93,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
       "fulfilment.view", "fulfilment.collect",
       "products.view", "stock.view",
       "reports.view.sales",
+      "documents.view", "documents.upload",
       "account.view"
     ]
   },
@@ -100,6 +107,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
       "purchasing.view", "purchasing.create", "purchasing.receive", "suppliers.manage",
       "fulfilment.view", "fulfilment.prepare", "fulfilment.dispatch", "fulfilment.collect",
       "reports.view.inventory",
+      "documents.view", "documents.upload",
       "account.view"
     ]
   },
@@ -114,6 +122,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
       "fulfilment.view", "fulfilment.collect",
       "purchasing.view",
       "reports.view.sales",
+      "documents.view", "documents.upload",
       "account.view"
     ]
   },
@@ -127,6 +136,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
       "fulfilment.view",
       "purchasing.view",
       "reports.view.sales", "reports.view.inventory", "reports.view.financial",
+      "documents.view", "documents.upload", "documents.manage",
       "account.view"
     ]
   },
@@ -139,6 +149,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
       "purchasing.view", "purchasing.receive",
       "fulfilment.view", "fulfilment.prepare", "fulfilment.dispatch", "fulfilment.collect",
       "reports.view.inventory",
+      "documents.view",
       "account.view"
     ]
   },
@@ -151,6 +162,7 @@ export const ROLE_DEFINITIONS: Record<AppRole, RoleDefinition> = {
       "fulfilment.view",
       "products.view", "stock.view",
       "reports.view.inventory",
+      "documents.view", "documents.upload", "documents.manage",
       "account.view"
     ]
   }

@@ -6,6 +6,8 @@ interface ProductAutocompleteSelectProps {
   products: Product[];
   value: string; // productId
   onChange: (productId: string) => void;
+  onSelectProduct?: (product: Product) => void;
+  priceType?: "selling" | "cost";
   placeholder?: string;
   autoFocus?: boolean;
   disabled?: boolean;
@@ -17,6 +19,8 @@ export const ProductAutocompleteSelect: React.FC<ProductAutocompleteSelectProps>
   products,
   value,
   onChange,
+  onSelectProduct,
+  priceType = "selling",
   placeholder = "Search product name, SKU, or keyword...",
   autoFocus = false,
   disabled = false,
@@ -111,6 +115,9 @@ export const ProductAutocompleteSelect: React.FC<ProductAutocompleteSelectProps>
 
   const handleSelectProduct = (product: Product) => {
     onChange(product.id);
+    if (onSelectProduct) {
+      onSelectProduct(product);
+    }
     setIsOpen(false);
     setSearchQuery("");
   };
@@ -194,7 +201,9 @@ export const ProductAutocompleteSelect: React.FC<ProductAutocompleteSelectProps>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="font-bold text-slate-950 font-mono">
-                  ${selectedProduct.sellingPrice.toFixed(2)}
+                  {priceType === "cost"
+                    ? `Cost: $${(selectedProduct.costPrice ?? 0).toFixed(2)}`
+                    : `$${(selectedProduct.sellingPrice ?? 0).toFixed(2)}`}
                 </span>
                 {selectedProduct.quantity <= 0 ? (
                   <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
@@ -298,7 +307,9 @@ export const ProductAutocompleteSelect: React.FC<ProductAutocompleteSelectProps>
                       <div className="flex items-center gap-2.5 shrink-0 text-right">
                         <div className="flex flex-col items-end gap-1">
                           <span className="font-extrabold font-mono text-slate-950 block">
-                            ${product.sellingPrice.toFixed(2)}
+                            {priceType === "cost"
+                              ? `Cost: $${(product.costPrice ?? 0).toFixed(2)}`
+                              : `$${(product.sellingPrice ?? 0).toFixed(2)}`}
                           </span>
                           {product.quantity <= 0 ? (
                             <span className="text-[9px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">

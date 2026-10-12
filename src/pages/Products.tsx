@@ -32,6 +32,8 @@ import { BarcodeScannerModal } from "../components/BarcodeScannerModal";
 import { SkuGeneratorModal } from "../components/SkuGeneratorModal";
 import { DocumentOcrModal } from "../components/DocumentOcrModal";
 import { CategoryManagementModal } from "../components/CategoryManagementModal";
+import { useAuth } from "../context/AuthContext";
+import { hasPermission } from "../types/rbac";
 
 const productSchema = z.object({
   name: z.string().min(3, { message: "Product Name must be at least 3 characters." }),
@@ -51,6 +53,12 @@ type ProductFormValues = z.infer<typeof productSchema>;
 export const Products: React.FC = () => {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const { user } = useAuth();
+
+  const canCreateProduct = hasPermission(user?.role, "products.create", user?.customPermissions);
+  const canEditProduct = hasPermission(user?.role, "products.edit", user?.customPermissions);
+  const canDeleteProduct = hasPermission(user?.role, "products.delete", user?.customPermissions);
+  const canManageCategories = hasPermission(user?.role, "categories.manage", user?.customPermissions);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -311,26 +319,30 @@ export const Products: React.FC = () => {
           </p>
         </div>
         
-        <div className="flex items-center gap-2.5 self-start sm:self-center">
-          <button
-            type="button"
-            onClick={() => setIsDocumentOcrOpen(true)}
-            id="btn-scan-document-products"
-            className="flex items-center gap-2 px-3.5 py-2.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 text-sm font-bold rounded-xl shadow-xs transition-all"
-          >
-            <ScanLine size={16} className="text-blue-600" />
-            <span>Scan Document Photo</span>
-          </button>
+        <div className="flex items-center gap-2.5 self-start sm:self-center flex-wrap">
+          {canCreateProduct && (
+            <button
+              type="button"
+              onClick={() => setIsDocumentOcrOpen(true)}
+              id="btn-scan-document-products"
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 text-sm font-bold rounded-xl shadow-xs transition-all"
+            >
+              <ScanLine size={16} className="text-blue-600" />
+              <span>Scan Document Photo</span>
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setIsSkuGeneratorOpen(true)}
-            id="btn-sku-generator-products"
-            className="flex items-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-sm font-bold rounded-xl shadow-xs transition-all"
-          >
-            <Wand2 size={16} className="text-blue-600" />
-            <span>SKU Generator</span>
-          </button>
+          {canCreateProduct && (
+            <button
+              type="button"
+              onClick={() => setIsSkuGeneratorOpen(true)}
+              id="btn-sku-generator-products"
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-sm font-bold rounded-xl shadow-xs transition-all"
+            >
+              <Wand2 size={16} className="text-blue-600" />
+              <span>SKU Generator</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -342,14 +354,16 @@ export const Products: React.FC = () => {
             <span>Scan Barcode</span>
           </button>
 
-          <button
-            onClick={handleOpenAddForm}
-            id="btn-add-product"
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-md shadow-blue-500/25 transition-all"
-          >
-            <Plus size={16} />
-            <span>Add Product</span>
-          </button>
+          {canCreateProduct && (
+            <button
+              onClick={handleOpenAddForm}
+              id="btn-add-product"
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-md shadow-blue-500/25 transition-all"
+            >
+              <Plus size={16} />
+              <span>Add Product</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -603,22 +617,31 @@ export const Products: React.FC = () => {
                     </td>
                     <td className="py-4 px-6 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleOpenEditForm(p)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
-                          title="Edit Product"
-                          id={`btn-edit-${p.id}`}
-                        >
-                          <Edit3 size={15} />
-                        </button>
-                        <button
-                          onClick={() => setDeleteId(p.id)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                          title="Delete Product"
-                          id={`btn-delete-${p.id}`}
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                        {canEditProduct && (
+                          <button
+                            onClick={() => handleOpenEditForm(p)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer border border-slate-200"
+                            title="Edit Product"
+                            id={`btn-edit-${p.id}`}
+                          >
+                            <Edit3 size={15} />
+                          </button>
+                        )}
+                        {canDeleteProduct && (
+                          <button
+                            onClick={() => setDeleteId(p.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer border border-slate-200"
+                            title="Delete Product"
+                            id={`btn-delete-${p.id}`}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                        {!canEditProduct && !canDeleteProduct && (
+                          <span className="text-3xs font-mono font-bold text-slate-400 uppercase bg-slate-50 px-2 py-1 rounded-md border border-slate-200">
+                            Read-Only
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>

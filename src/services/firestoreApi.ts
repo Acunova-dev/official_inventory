@@ -1,3 +1,6 @@
+import { initializeApp, deleteApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth";
+import firebaseConfig from "../../firebase-applet-config.json";
 import { 
   collection, 
   doc, 
@@ -3125,6 +3128,30 @@ export const settingsService = {
 // -------------------------------------------------------------
 // USER MANAGEMENT SERVICE
 // -------------------------------------------------------------
+export const provisionFirebaseAuthUser = async (email: string, password: string): Promise<string | null> => {
+  const secondaryAppName = `Provision_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  let secondaryApp: any = null;
+  try {
+    secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+    const secondaryAuth = getAuth(secondaryApp);
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, email.trim().toLowerCase(), password);
+    const uid = cred.user.uid;
+    await firebaseSignOut(secondaryAuth);
+    return uid;
+  } catch (err: any) {
+    console.warn("provisionFirebaseAuthUser result:", err?.code || err?.message || err);
+    return null;
+  } finally {
+    if (secondaryApp) {
+      try {
+        await deleteApp(secondaryApp);
+      } catch (cleanErr) {
+        // ignore
+      }
+    }
+  }
+};
+
 export const userService = {
   getAll: async (businessId: string): Promise<User[]> => {
     const path = `users`;
@@ -3137,21 +3164,57 @@ export const userService = {
     }
   },
 
-  create: async (businessId: string, data: Omit<User, "id" | "disabled">): Promise<User> => {
-    const id = `usr-${Date.now()}`;
+  create: async (businessId: string, data: Omit<User, "id" | "disabled"> & { password?: string }): Promise<User> => {
+    const normalizedEmail = data.email.trim().toLowerCase();
+    let targetUid: string | null = null;
+
+    // 1. Provision identity in Firebase Authentication if password provided
+    if (data.password) {
+      try {
+        targetUid = await provisionFirebaseAuthUser(normalizedEmail, data.password);
+      } catch (authErr) {
+        console.warn("Auth provisioning warning:", authErr);
+      }
+    }
+
+    // 2. Check if a pre-existing user record exists for this email
+    let existingDocId: string | null = null;
+    try {
+      const q = query(collection(db, "users"), where("email", "==", normalizedEmail));
+      const qSnap = await getDocs(q);
+      if (!qSnap.empty) {
+        existingDocId = qSnap.docs[0].id;
+      }
+    } catch (e) {
+      console.warn("Pre-check existing user doc note:", e);
+    }
+
+    const id = targetUid || existingDocId || `usr-${Date.now()}`;
     const path = `users/${id}`;
     const perms = data.customPermissions || ROLE_DEFINITIONS[data.role as AppRole]?.permissions || [];
+
     const newUser: User = {
       ...data,
+      email: normalizedEmail,
       id,
-      businessId,
+      businessId, // Attached directly to the parent company!
       disabled: false,
       status: "Active",
       customPermissions: perms,
       createdDate: new Date().toISOString()
     };
+
     try {
       await setDoc(doc(db, "users", id), newUser);
+
+      // Clean up legacy document if ID changed to the Auth UID
+      if (existingDocId && existingDocId !== id) {
+        try {
+          await deleteDoc(doc(db, "users", existingDocId));
+        } catch (delErr) {
+          console.warn("Could not delete legacy duplicate user doc:", delErr);
+        }
+      }
       
       const currUser = auth.currentUser;
       const adminEmail = currUser?.email || "";
@@ -3162,7 +3225,7 @@ export const userService = {
         action: "USER_PROVISIONED",
         userEmail: adminEmail,
         userName: adminName,
-        details: `Provisioned staff profile for '${newUser.name}' (${newUser.email}) with role '${newUser.role}'`,
+        details: `Provisioned corporate operator profile for '${newUser.name}' (${newUser.email}) with role '${newUser.role}' in enterprise business (${businessId})`,
         targetId: id,
         severity: "info"
       });
@@ -3178,6 +3241,9 @@ export const userService = {
     try {
       const refDoc = doc(db, "users", id);
       const updatePayload: Partial<User> = { ...data };
+      if (data.email) {
+        updatePayload.email = data.email.trim().toLowerCase();
+      }
       if (data.role && !data.customPermissions) {
         updatePayload.customPermissions = ROLE_DEFINITIONS[data.role as AppRole]?.permissions || [];
       }
@@ -3204,6 +3270,31 @@ export const userService = {
       return updatedUser;
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  },
+
+  delete: async (businessId: string, id: string): Promise<void> => {
+    const path = `users/${id}`;
+    try {
+      const snap = await getDoc(doc(db, "users", id));
+      const uData = snap.data() as User | undefined;
+      await deleteDoc(doc(db, "users", id));
+
+      const currUser = auth.currentUser;
+      const adminEmail = currUser?.email || "";
+      const adminName = currUser?.displayName || (adminEmail ? adminEmail.split("@")[0] : "Admin");
+
+      await systemLogService.logAction(businessId, {
+        category: "User Management",
+        action: "USER_DELETED",
+        userEmail: adminEmail,
+        userName: adminName,
+        details: `Deleted staff profile for '${uData?.name || id}' (${uData?.email || "Unknown"})`,
+        targetId: id,
+        severity: "warning"
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, path);
     }
   }
 };

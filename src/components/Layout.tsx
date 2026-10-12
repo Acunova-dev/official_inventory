@@ -229,86 +229,117 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
               {isQuickActionsOpen && (
                 <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 py-2 divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-100">
-                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Daily Sales & Operations
-                  </div>
-                  <div className="py-1">
-                    <button
-                      onClick={() => { setIsQuickActionsOpen(false); navigate("/quotations", { state: { openCreateModal: true } }); }}
-                      className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <FileText size={15} className="text-indigo-600" />
-                      New Quotation
-                    </button>
-                    <button
-                      onClick={() => { setIsQuickActionsOpen(false); navigate("/invoices", { state: { openCreateModal: true } }); }}
-                      className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <FileCheck size={15} className="text-blue-600" />
-                      New Tax Invoice
-                    </button>
-                    <button
-                      onClick={() => { setIsQuickActionsOpen(false); navigate("/receipts"); }}
-                      className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <Receipt size={15} className="text-emerald-600" />
-                      Record Sales Receipt
-                    </button>
-                  </div>
+                  {/* Daily Sales & Operations */}
+                  {(hasPermission(user?.role, "sales.create", user?.customPermissions) || hasPermission(user?.role, "receipts.create", user?.customPermissions)) && (
+                    <div className="py-1">
+                      <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Daily Sales & Operations
+                      </div>
+                      {hasPermission(user?.role, "sales.create", user?.customPermissions) && (
+                        <>
+                          <button
+                            onClick={() => { setIsQuickActionsOpen(false); navigate("/quotations", { state: { openCreateModal: true } }); }}
+                            className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+                          >
+                            <FileText size={15} className="text-indigo-600" />
+                            New Quotation
+                          </button>
+                          <button
+                            onClick={() => { setIsQuickActionsOpen(false); navigate("/invoices", { state: { openCreateModal: true } }); }}
+                            className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+                          >
+                            <FileCheck size={15} className="text-blue-600" />
+                            New Tax Invoice
+                          </button>
+                        </>
+                      )}
+                      {hasPermission(user?.role, "receipts.create", user?.customPermissions) && (
+                        <button
+                          onClick={() => { setIsQuickActionsOpen(false); navigate("/receipts"); }}
+                          className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+                        >
+                          <Receipt size={15} className="text-emerald-600" />
+                          Record Sales Receipt
+                        </button>
+                      )}
+                    </div>
+                  )}
 
-                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Fulfilment & Dispatch
-                  </div>
-                  <div className="py-1">
-                    <button
-                      onClick={() => { setIsQuickActionsOpen(false); navigate("/fulfilment/scan"); }}
-                      className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <QrCode size={15} className="text-emerald-600" />
-                      Scan Collection QR
-                    </button>
-                    <button
-                      onClick={() => { setIsQuickActionsOpen(false); navigate("/fulfilment/orders"); }}
-                      className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <Package size={15} className="text-blue-600" />
-                      Prepare Customer Orders
-                    </button>
-                    <button
-                      onClick={() => { setIsQuickActionsOpen(false); navigate("/fulfilment/batches"); }}
-                      className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <Truck size={15} className="text-purple-600" />
-                      New Dispatch Batch
-                    </button>
-                  </div>
+                  {/* Fulfilment & Dispatch */}
+                  {(hasPermission(user?.role, "fulfilment.collect", user?.customPermissions) || 
+                    hasPermission(user?.role, "fulfilment.prepare", user?.customPermissions) || 
+                    hasPermission(user?.role, "fulfilment.dispatch", user?.customPermissions)) && (
+                    <div className="py-1">
+                      <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Fulfilment & Dispatch
+                      </div>
+                      {hasPermission(user?.role, "fulfilment.collect", user?.customPermissions) && (
+                        <button
+                          onClick={() => { setIsQuickActionsOpen(false); navigate("/fulfilment/scan"); }}
+                          className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+                        >
+                          <QrCode size={15} className="text-emerald-600" />
+                          Scan Collection QR
+                        </button>
+                      )}
+                      {hasPermission(user?.role, "fulfilment.prepare", user?.customPermissions) && (
+                        <button
+                          onClick={() => { setIsQuickActionsOpen(false); navigate("/fulfilment/orders"); }}
+                          className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+                        >
+                          <Package size={15} className="text-blue-600" />
+                          Prepare Customer Orders
+                        </button>
+                      )}
+                      {hasPermission(user?.role, "fulfilment.dispatch", user?.customPermissions) && (
+                        <button
+                          onClick={() => { setIsQuickActionsOpen(false); navigate("/fulfilment/batches"); }}
+                          className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+                        >
+                          <Truck size={15} className="text-purple-600" />
+                          New Dispatch Batch
+                        </button>
+                      )}
+                    </div>
+                  )}
 
-                  <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Inventory & Purchasing
-                  </div>
-                  <div className="py-1">
-                    <button
-                      onClick={() => { setIsQuickActionsOpen(false); navigate("/purchasing/orders"); }}
-                      className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <ShoppingBag size={15} className="text-amber-600" />
-                      New Purchase Order
-                    </button>
-                    <button
-                      onClick={() => { setIsQuickActionsOpen(false); navigate("/purchasing/grn"); }}
-                      className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <PackageCheck size={15} className="text-teal-600" />
-                      Receive Goods (GRN)
-                    </button>
-                    <button
-                      onClick={() => { setIsQuickActionsOpen(false); navigate("/products"); }}
-                      className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
-                    >
-                      <Package size={15} className="text-slate-600" />
-                      Add Product SKU
-                    </button>
-                  </div>
+                  {/* Inventory & Purchasing */}
+                  {(hasPermission(user?.role, "purchasing.create", user?.customPermissions) || 
+                    hasPermission(user?.role, "purchasing.receive", user?.customPermissions) || 
+                    hasPermission(user?.role, "products.create", user?.customPermissions)) && (
+                    <div className="py-1">
+                      <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Inventory & Purchasing
+                      </div>
+                      {hasPermission(user?.role, "purchasing.create", user?.customPermissions) && (
+                        <button
+                          onClick={() => { setIsQuickActionsOpen(false); navigate("/purchasing/orders"); }}
+                          className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+                        >
+                          <ShoppingBag size={15} className="text-amber-600" />
+                          New Purchase Order
+                        </button>
+                      )}
+                      {hasPermission(user?.role, "purchasing.receive", user?.customPermissions) && (
+                        <button
+                          onClick={() => { setIsQuickActionsOpen(false); navigate("/purchasing/grn"); }}
+                          className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+                        >
+                          <PackageCheck size={15} className="text-teal-600" />
+                          Receive Goods (GRN)
+                        </button>
+                      )}
+                      {hasPermission(user?.role, "products.create", user?.customPermissions) && (
+                        <button
+                          onClick={() => { setIsQuickActionsOpen(false); navigate("/products"); }}
+                          className="w-full text-left px-3 py-2 text-xs font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition-colors cursor-pointer"
+                        >
+                          <Package size={15} className="text-slate-600" />
+                          Add Product SKU
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

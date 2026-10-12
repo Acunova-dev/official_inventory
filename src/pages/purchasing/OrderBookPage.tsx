@@ -19,6 +19,7 @@ import {
   FileText
 } from "lucide-react";
 import { UnifiedDocumentModal } from "../../components/UnifiedDocumentModal";
+import { ProductAutocompleteSelect } from "../../components/ProductAutocompleteSelect";
 
 export const OrderBookPage: React.FC = () => {
   const { user } = useAuth();
@@ -350,16 +351,14 @@ export const OrderBookPage: React.FC = () => {
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-600 block">Add Line Item</span>
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
                   <div className="sm:col-span-5">
-                    <select
+                    <ProductAutocompleteSelect
+                      products={products}
                       value={newItemProductId}
-                      onChange={(e) => handleProductSelect(e.target.value)}
-                      className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white"
-                    >
-                      <option value="">Select Product...</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
-                      ))}
-                    </select>
+                      onChange={handleProductSelect}
+                      priceType="cost"
+                      placeholder="Type to filter product or SKU..."
+                      id="po-product-autocomplete"
+                    />
                   </div>
 
                   <div className="sm:col-span-3">

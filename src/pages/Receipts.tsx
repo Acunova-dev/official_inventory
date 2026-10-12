@@ -24,8 +24,8 @@ import {
   AlertCircle,
   TrendingDown
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
 import { UnifiedDocumentModal } from "../components/UnifiedDocumentModal";
+import { ProductAutocompleteSelect } from "../components/ProductAutocompleteSelect";
 import { getMergedCompanySettings } from "../constants/defaultSettings";
 import { normalizeDocument, enrichDocumentData, exportDocumentToPdf } from "../utils/documentPrinter";
 
@@ -374,44 +374,47 @@ export const Receipts: React.FC = () => {
                 {errors.items && <p className="text-xs text-rose-500 font-semibold">{errors.items.message}</p>}
 
                 <div className="space-y-3">
-                  {fields.map((field, index) => (
-                    <div key={field.id} className="flex gap-4 items-center bg-slate-50/50 p-3 rounded-xl border border-slate-200 relative">
-                      <div className="flex-1">
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Hardware Item Selection</label>
-                        <select
-                          {...register(`items.${index}.productId`, { required: true })}
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-2 text-xs font-semibold focus:outline-hidden"
-                        >
-                          <option value="">-- Choose Stock --</option>
-                          {products.map(p => (
-                            <option key={p.id} value={p.id} disabled={p.quantity <= 0}>
-                              {p.name} (${p.sellingPrice}) — {p.quantity} left
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                  {fields.map((field, index) => {
+                    const currentProdId = watch(`items.${index}.productId`);
+                    return (
+                      <div key={field.id} className="flex gap-4 items-center bg-slate-50/50 p-3 rounded-xl border border-slate-200 relative">
+                        <div className="flex-1 min-w-0">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Hardware Item Selection</label>
+                          <ProductAutocompleteSelect
+                            products={products}
+                            value={currentProdId || ""}
+                            onChange={(newId) => {
+                              setValue(`items.${index}.productId`, newId, { shouldValidate: true, shouldDirty: true });
+                            }}
+                            placeholder="Search product name, SKU, or keywords..."
+                            autoFocus={!currentProdId}
+                            error={(errors.items as any)?.[index]?.productId?.message}
+                            id={`receipt-item-select-${index}`}
+                          />
+                        </div>
 
-                      <div className="w-24">
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Quantity</label>
-                        <input
-                          type="number"
-                          min="1"
-                          {...register(`items.${index}.quantity`, { required: true, valueAsNumber: true })}
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-2 text-xs text-center font-bold font-mono focus:outline-hidden"
-                        />
-                      </div>
+                        <div className="w-24 shrink-0">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Quantity</label>
+                          <input
+                            type="number"
+                            min="1"
+                            {...register(`items.${index}.quantity`, { required: true, valueAsNumber: true })}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2 py-2 text-xs text-center font-bold font-mono focus:outline-hidden"
+                          />
+                        </div>
 
-                      {fields.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => remove(index)}
-                          className="mt-4 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                        {fields.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => remove(index)}
+                            className="mt-4 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div>

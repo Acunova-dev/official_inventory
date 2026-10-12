@@ -1026,3 +1026,51 @@ export interface FulfilmentSummaryStats {
   activeBatchesCount?: number;
 }
 
+// -------------------------------------------------------------
+// DOCUMENT VAULT & DIGITAL ARCHIVE TYPES
+// -------------------------------------------------------------
+export type DocumentCategory = 
+  | "expense-receipts"        // Receipts for business expenses
+  | "client-purchase-orders"  // Purchase orders sent by clients to place orders
+  | "client-proof-of-payment" // Proof of payment sent by clients
+  | "general";                // Other operational documents
+
+export interface LinkedEntityInfo {
+  entityType: "payment-voucher" | "petty-cash" | "invoice" | "quotation" | "customer" | "supplier" | "receipt";
+  entityId: string;
+  entityReference?: string;
+}
+
+export interface VaultDocument {
+  id: string;
+  businessId: string;
+  name: string;
+  category: DocumentCategory;
+  subfolder?: string;
+  fileUrl: string;
+  fileType: string;
+  fileSize: number;
+  amount?: number;
+  currency?: string;
+  transactionDate?: string;
+  referenceNumber?: string;
+  partnerName?: string;
+  status: "Pending Review" | "Verified" | "Reconciled" | "Archived";
+  notes?: string;
+  tags?: string[];
+  linkedEntity?: LinkedEntityInfo;
+  uploadedAt: string;
+  uploadedBy?: {
+    uid: string;
+    name: string;
+    email: string;
+  };
+}
+
+export interface DocumentFolderConfig {
+  id: DocumentCategory;
+  name: string;
+  description: string;
+  color: string;
+  badge: string;
+}
